@@ -1,34 +1,138 @@
+from __future__ import annotations
+
+from pathlib import Path
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
+
+
+def clean_url(url: str) -> str:
+    """Remove tracking params like ?si=... that sometimes cause weirdness."""
+    u = url.strip()
+    try:
+        p = urlparse(u)
+        if not p.scheme:
+            return u
+        qs = parse_qs(p.query, keep_blank_values=True)
+
+        # strip common tracking params
+        for k in ("si", "feature", "utm_source", "utm_medium", "utm_campaign"):
+            qs.pop(k, None)
+
+        # rebuild query
+        new_query = urlencode({k: v for k, v in qs.items()}, doseq=True)
+        return urlunparse(p._replace(query=new_query))
+    except Exception:
+        return u
 
 
 class MediaDownloader:
-
-    def __init__(self, output_path="downloads"):
+    def __init__(self, output_path: str = "downloads"):
         self.output_path = output_path
 
-    def download(self, url, format_type="mp3", quality="192", progress_callback=None):
+    def _base_opts(self, progress_callback=None) -> dict:
+        out_dir = Path(self.output_path)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-        ydl_opts = {
-            "outtmpl": f"{self.output_path}/%(title)s.%(ext)s",
+        return {
+            "outtmpl": str(out_dir / "%(title)s.%(ext)s"),
             "noplaylist": True,
             "windowsfilenames": True,
+            "retries": 3,
             "progress_hooks": [progress_callback] if progress_callback else [],
+            #  no ANSI color codes in exception/log text
+            "color": "never",  # :contentReference[oaicite:5]{index=5}
+            #  more "browser-like" headers helps sometimes
+            "http_headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            # YouTube client selection. Excluding buggy clients is supported
+            #    (you can prefix with '-' to exclude). :contentReference[oaicite:6]{index=6}
+            "extractor_args": {
+                "youtube": {
+                    # default clients, but exclude android_sdkless (common 403 culprit)
+                    "player_client": ["default", "-android_sdkless"],
+                }
+            },
         }
 
+    def download(self, url: str, format_type: str = "mp3", quality: str = "192", progress_callback=None):
+        url = clean_url(url)
+        base = self._base_opts(progress_callback=progress_callback)
+
         if format_type == "mp3":
-            ydl_opts.update({
+            opts = {
+                **base,
                 "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": quality,
-                }],
-            })
+                "writethumbnail": True,
+                "postprocessors": [
+                    {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(quality)},
+                    {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
+                    {"key": "EmbedThumbnail"},  # requires mutagen :contentReference[oaicite:7]{index=7}
+                    {"key": "FFmpegMetadata"},
+                ],
+                "postprocessor_args": ["-id3v2_version", "3"],
+            }
+
+            self._try_download_with_fallback(url, opts)
 
         elif format_type == "mp4":
-            ydl_opts.update({
-                "format": "bestvideo+bestaudio/best"
-            })
+            # Prefer MP4 video + M4A audio to avoid odd combos
+            opts = {
+                **base,
+                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "merge_output_format": "mp4",
+                "postprocessors": [{"key": "FFmpegMetadata"}],
+            }
 
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            self._try_download_with_fallback(url, opts)
+
+        else:
+            raise ValueError(f"Unsupported format_type: {format_type}")
+    def get_info(self, url: str) -> dict:
+        """Fetch metadata without downloading."""
+        base = self._base_opts(progress_callback=None)
+        base.update({
+            "skip_download": True,
+            "quiet": True,
+            "no_warnings": True,
+            "color": "never",
+        })
+        with YoutubeDL(base) as ydl:
+            return ydl.extract_info(url, download=False)
+
+    def _try_download_with_fallback(self, url: str, opts: dict) -> None:
+        """
+        If we hit HTTP 403, retry with a different YouTube client set.
+        This is NOT guaranteed (YouTube changes often), but helps a lot in practice.
+        """
+        try:
+            with YoutubeDL(opts) as ydl:
+                ydl.download([url])
+            return
+        except DownloadError as e:
+            msg = str(e)
+            if "HTTP Error 403" not in msg and "Forbidden" not in msg:
+                raise
+
+            # Fallback 1: exclude android entirely (sometimes fixes 403)
+            fb1 = dict(opts)
+            fb1["extractor_args"] = {"youtube": {"player_client": ["default", "-android_sdkless", "-android"]}}
+            try:
+                with YoutubeDL(fb1) as ydl:
+                    ydl.download([url])
+                return
+            except DownloadError:
+                pass
+
+            # Fallback 2: force web only (last try)
+            fb2 = dict(opts)
+            fb2["extractor_args"] = {"youtube": {"player_client": ["web"]}}
+            with YoutubeDL(fb2) as ydl:
+                ydl.download([url])

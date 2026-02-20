@@ -2,6 +2,8 @@
 
 TRANSLATIONS = {
     "en": {
+        "now_downloading": "Now downloading: {title}",
+
         "app_name": "YouToMp3 Pro",
         "language": "Language",
         "paste_urls": "Paste URL(s)",
@@ -27,6 +29,7 @@ TRANSLATIONS = {
         "all_done": "All tasks completed.",
     },
     "es": {
+        "now_downloading": "Descargando ahora: {title}",
         "app_name": "YouToMp3 Pro",
         "language": "Idioma",
         "paste_urls": "Pega URL(s)",

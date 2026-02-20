@@ -5,9 +5,8 @@ from PySide6.QtWidgets import (
     QLabel, QFileDialog, QComboBox, QProgressBar, QMessageBox, QFrame
 )
 from PySide6.QtCore import Qt, QThread, QSettings
-from PySide6.QtGui import QFont, QFontMetrics, QColor
+from PySide6.QtGui import QFont, QFontMetrics, QColor, QIcon
 from PySide6.QtWidgets import QGraphicsDropShadowEffect
-
 from app.downloader import MediaDownloader
 from app.ui.worker import DownloadWorker
 from app.ui.i18n import TRANSLATIONS
@@ -30,7 +29,7 @@ class MainWindow(QMainWindow):
         # Settings (persist language + folder)
         self.settings = QSettings("kriv-bit", "YouToMp3Pro")
         self.lang = self.settings.value("language", "en")
-
+        self.setWindowIcon(QIcon(os.path.join("assets", "icon.ico")))
         self.output_folder = self.settings.value("output_folder", os.path.abspath("downloads"))
         self.downloader = MediaDownloader(output_path=self.output_folder)
 
@@ -40,8 +39,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(TRANSLATIONS[self.lang]["app_name"])
         self.setMinimumSize(1040, 680)
 
-        app_font = QFont("Segoe UI", 10)
+        app_font = QFont("Segoe UI Variable", 10)
+        if not app_font.exactMatch():
+            app_font = QFont("Segoe UI", 10)
         self.setFont(app_font)
+
+
 
         self._i18n_bindings = []  # list of (widget, key, attr)
 
@@ -123,7 +126,7 @@ class MainWindow(QMainWindow):
         s.addWidget(self.lbl_format)
 
         self.format_box = QComboBox()
-        self.format_box.addItems(["mp3", "mp4"])
+        self.format_box.addItems(["mp3"])
         s.addWidget(self.format_box)
 
         # Quality
@@ -221,6 +224,9 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setObjectName("Progress")
         actions.addWidget(self.progress_bar, 1)
+        self.now_label = QLabel("")
+        self.now_label.setObjectName("NowLabel")
+        c.addWidget(self.now_label)
 
         self.download_btn = QPushButton()
         self.download_btn.setObjectName("PrimaryButton")
@@ -299,23 +305,34 @@ class MainWindow(QMainWindow):
         }
 
         QComboBox {
-            background: #0B111A;
-            border: 1px solid #1B2A3D;
-            padding: 10px 12px;
-            border-radius: 12px;
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                        stop:0 #0B1422, stop:1 #070C14);
+            border: 1px solid #22344C;
+            border-left: 3px solid #00D4FF;
+            padding: 10px 14px;
+            border-radius: 14px;
             color: #E6EDF3;
+            font-size: 13px;
+            font-weight: 600;
+            min-height: 44px;
         }
-        QComboBox:hover { border-color: #2B3E56; }
+        QComboBox:hover { border-color: #2E4866; }
+        QComboBox:focus { border: 1px solid #00D4FF; }
+
         QComboBox::drop-down {
             border: none;
-            width: 26px;
+            width: 44px;
+            background: #0E1622;
+            border-top-right-radius: 14px;
+            border-bottom-right-radius: 14px;
         }
         QComboBox QAbstractItemView {
-            background: #0B111A;
-            border: 1px solid #1B2A3D;
+            background: #0A1018;
+            border: 1px solid #22344C;
             selection-background-color: #11324B;
             color: #E6EDF3;
             outline: 0;
+            padding: 8px;
         }
 
         #Chip {
@@ -369,7 +386,7 @@ class MainWindow(QMainWindow):
                 stop:0 #00D4FF, stop:1 #A855F7
             );
         }
-
+        #NowLabel { color:#9AA4B2; font-size:12px; }
         #PrimaryButton {
             min-width: 170px;
             padding: 12px 16px;
@@ -484,6 +501,8 @@ class MainWindow(QMainWindow):
         key = event.get("key", "ready")
         args = event.get("args", {})
         self.add_log(self._tf(key, **args))
+        if key == "now_downloading":
+            self.now_label.setText(self._tf(key, **args))
 
     def on_worker_finished(self):
         self.download_btn.setEnabled(True)

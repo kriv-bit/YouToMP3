@@ -28,6 +28,7 @@ class DownloadWorker(QObject):
 
     @Slot()
     def run(self):
+        
         self.status_key.emit("downloading")
         self.progress.emit(0)
 
@@ -37,6 +38,11 @@ class DownloadWorker(QObject):
         for i, url in enumerate(self.urls, start=1):
             self.log_event.emit({"key": "item_downloading", "args": {"i": i, "total": total_items, "url": url}})
             try:
+                info = self.downloader.get_info(url)
+                title = info.get("title") or url
+                uploader = info.get("uploader") or info.get("channel") or ""
+                nice = f"{title}" + (f" — {uploader}" if uploader else "")
+                self.log_event.emit({"key": "now_downloading", "args": {"title": nice}})        
                 self.downloader.download(
                     url,
                     format_type=self.fmt,
