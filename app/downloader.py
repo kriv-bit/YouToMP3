@@ -74,24 +74,49 @@ class MediaDownloader:
                 "postprocessors": [
                     {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(quality)},
                     {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
-                    {"key": "EmbedThumbnail"},  # requires mutagen :contentReference[oaicite:7]{index=7}
+                    {"key": "EmbedThumbnail"},
                     {"key": "FFmpegMetadata"},
                 ],
                 "postprocessor_args": ["-id3v2_version", "3"],
             }
+            r = self._try_download_with_fallback(url, opts)
+            base_path = r.get("base_path", "")
+            final_path = str(Path(base_path).with_suffix(".mp3")) if base_path else ""
+            return {"title": r.get("info", {}).get("title", ""), "filepath": final_path}
 
+        elif format_type == "m4a":
+            opts = {
+                **base,
+                "format": "bestaudio/best",
+                "postprocessors": [
+                    {"key": "FFmpegExtractAudio", "preferredcodec": "m4a", "preferredquality": str(quality)},
+                    {"key": "FFmpegMetadata"},
+                ],
+            }
+            self._try_download_with_fallback(url, opts)
+
+        elif format_type == "wav":
+            opts = {
+                **base,
+                "format": "bestaudio/best",
+                "postprocessors": [
+                    {"key": "FFmpegExtractAudio", "preferredcodec": "wav"},
+                    {"key": "FFmpegMetadata"},
+                ],
+            }
             self._try_download_with_fallback(url, opts)
 
         elif format_type == "mp4":
-            # Prefer MP4 video + M4A audio to avoid odd combos
             opts = {
                 **base,
                 "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                 "merge_output_format": "mp4",
                 "postprocessors": [{"key": "FFmpegMetadata"}],
             }
-
-            self._try_download_with_fallback(url, opts)
+            r = self._try_download_with_fallback(url, opts)
+            base_path = r.get("base_path", "")
+            final_path = str(Path(base_path).with_suffix(".mp4")) if base_path else ""
+            return {"title": r.get("info", {}).get("title", ""), "filepath": final_path}
 
         else:
             raise ValueError(f"Unsupported format_type: {format_type}")
@@ -107,32 +132,27 @@ class MediaDownloader:
         with YoutubeDL(base) as ydl:
             return ydl.extract_info(url, download=False)
 
-    def _try_download_with_fallback(self, url: str, opts: dict) -> None:
-        """
-        If we hit HTTP 403, retry with a different YouTube client set.
-        This is NOT guaranteed (YouTube changes often), but helps a lot in practice.
-        """
+    def _try_download_with_fallback(self, url: str, opts: dict) -> dict:
+        def _run(o):
+            with YoutubeDL(o) as ydl:
+                info = ydl.extract_info(url, download=True)
+                base_path = ydl.prepare_filename(info)
+                return {"info": info, "base_path": base_path}
+
         try:
-            with YoutubeDL(opts) as ydl:
-                ydl.download([url])
-            return
+            return _run(opts)
         except DownloadError as e:
             msg = str(e)
             if "HTTP Error 403" not in msg and "Forbidden" not in msg:
                 raise
 
-            # Fallback 1: exclude android entirely (sometimes fixes 403)
             fb1 = dict(opts)
             fb1["extractor_args"] = {"youtube": {"player_client": ["default", "-android_sdkless", "-android"]}}
             try:
-                with YoutubeDL(fb1) as ydl:
-                    ydl.download([url])
-                return
+                return _run(fb1)
             except DownloadError:
                 pass
 
-            # Fallback 2: force web only (last try)
             fb2 = dict(opts)
             fb2["extractor_args"] = {"youtube": {"player_client": ["web"]}}
-            with YoutubeDL(fb2) as ydl:
-                ydl.download([url])
+            return _run(fb2)

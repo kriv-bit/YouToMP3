@@ -2,35 +2,32 @@
 import os
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
-    QLabel, QFileDialog, QComboBox, QProgressBar, QMessageBox, QFrame
+    QLabel, QFileDialog, QComboBox, QProgressBar, QMessageBox, QFrame,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QSplitter, QDialog
 )
-from PySide6.QtCore import Qt, QThread, QSettings
-from PySide6.QtGui import QFont, QFontMetrics, QColor, QIcon
-from PySide6.QtWidgets import QGraphicsDropShadowEffect
+from PySide6.QtCore import QThread, QUrl
+from PySide6.QtGui import QFont, QIcon, QDesktopServices, Qt
 from app.downloader import MediaDownloader
 from app.ui.worker import DownloadWorker
 from app.ui.i18n import TRANSLATIONS
-
-
-def add_shadow(widget, color_hex="#00D4FF", blur=22, x=0, y=6, alpha=70):
-    eff = QGraphicsDropShadowEffect()
-    c = QColor(color_hex)
-    c.setAlpha(alpha)
-    eff.setColor(c)
-    eff.setBlurRadius(blur)
-    eff.setOffset(x, y)
-    widget.setGraphicsEffect(eff)
-
+from app.ui.widgets import add_shadow, set_elided
+from app.ui.style import main_qss
+from app.ui.settings import AppSettings
+import json
 
 class MainWindow(QMainWindow):
+    def closeEvent(self, event):
+            self.save_queue()
+            self.settings.save_geometry(self)
+            super().closeEvent(event)
     def __init__(self):
         super().__init__()
 
         # Settings (persist language + folder)
-        self.settings = QSettings("kriv-bit", "YouToMp3Pro")
-        self.lang = self.settings.value("language", "en")
+        self.settings = AppSettings()
+        self.lang = self.settings.get_language()
+        self.output_folder = self.settings.get_output_folder()
         self.setWindowIcon(QIcon(os.path.join("assets", "icon.ico")))
-        self.output_folder = self.settings.value("output_folder", os.path.abspath("downloads"))
         self.downloader = MediaDownloader(output_path=self.output_folder)
 
         self.thread = None
@@ -51,6 +48,8 @@ class MainWindow(QMainWindow):
         self.build_ui()
         self.apply_style()
         self.apply_language(self.lang)
+        self.settings.restore_geometry(self)
+        self.load_queue()
 
         self.add_log(self._t("ready"))
 
@@ -70,14 +69,23 @@ class MainWindow(QMainWindow):
 
     def apply_language(self, lang: str):
         self.lang = "es" if lang == "es" else "en"
-        self.settings.setValue("language", self.lang)
+        self.settings.set_language(self.lang)
         self.setWindowTitle(self._t("app_name"))
 
         # Update all bound labels/buttons
         for w, key, attr in self._i18n_bindings:
             if attr == "text":
                 w.setText(self._t(key))
-
+        # Update table headers
+        if hasattr(self, "queue_table"):
+            self.queue_table.setHorizontalHeaderLabels([
+                self._t("col_title"),
+                self._t("col_url"),
+                self._t("col_format"),
+                self._t("col_status"),
+                self._t("col_progress"),
+                self._t("col_output"),
+            ])
         # Update dynamic fields
         self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
         self.url_box.setPlaceholderText("https://youtu.be/VIDEO_ID\nhttps://youtu.be/ANOTHER_ID")
@@ -88,7 +96,13 @@ class MainWindow(QMainWindow):
             self.download_btn.setText(self._t("download"))
         else:
             self.download_btn.setText(self._t("downloading"))
+    def _settings_get(self, key: str, default=None):
+        s = getattr(self.settings, "qs", self.settings) 
+        return s.value(key, default)
 
+    def _settings_set(self, key: str, value):
+        s = getattr(self.settings, "qs", self.settings)
+        s.setValue(key, value)
     # ---------------- UI ----------------
     def build_ui(self):
         root = QWidget()
@@ -126,7 +140,7 @@ class MainWindow(QMainWindow):
         s.addWidget(self.lbl_format)
 
         self.format_box = QComboBox()
-        self.format_box.addItems(["mp3"])
+        self.format_box.addItems(["mp3","wav","m4a"])
         s.addWidget(self.format_box)
 
         # Quality
@@ -147,7 +161,7 @@ class MainWindow(QMainWindow):
         self.folder_chip = QLabel(self.output_folder)
         self.folder_chip.setObjectName("Chip")
         self.folder_chip.setWordWrap(False)
-        self.set_elided(self.folder_chip, self.output_folder)
+        set_elided(self.folder_chip, self.output_folder)
         s.addWidget(self.folder_chip)
 
         self.folder_btn = QPushButton()
@@ -155,6 +169,12 @@ class MainWindow(QMainWindow):
         self.folder_btn.setObjectName("SecondaryButton")
         self.folder_btn.clicked.connect(self.select_folder)
         s.addWidget(self.folder_btn)
+
+        self.open_folder_btn = QPushButton()
+        self._bind_text(self.open_folder_btn, "open_output_folder")
+        self.open_folder_btn.setObjectName("SecondaryButton")
+        self.open_folder_btn.clicked.connect(self.open_output_folder)
+        s.addWidget(self.open_folder_btn)
 
         # Status
         s.addSpacing(10)
@@ -235,15 +255,54 @@ class MainWindow(QMainWindow):
 
         c.addLayout(actions)
 
-        # Console
-        self.console_label = QLabel()
-        self._bind_text(self.console_label, "console")
-        c.addWidget(self.console_label)
+        # Queue Table
+        self.queue_table = QTableWidget(0, 6)
+        self.queue_table.setObjectName("QueueTable")
+        self.queue_table.setHorizontalHeaderLabels([
+            self._t("col_title"),
+            self._t("col_url"),
+            self._t("col_format"),
+            self._t("col_status"),
+            self._t("col_progress"),
+            self._t("col_output"),
+        ])
+        hdr = self.queue_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.Stretch)          # title
+        hdr.setSectionResizeMode(1, QHeaderView.Stretch)          # url
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents) # format
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents) # status
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents) # progress
+        hdr.setSectionResizeMode(5, QHeaderView.Stretch)          # output
+        self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.queue_table.setAlternatingRowColors(True)
+        self.queue_table.setObjectName("QueueTable")
+        self.queue_table.verticalHeader().setVisible(False)  
+        self.queue_table.setShowGrid(True)  
+        self.queue_table.setAlternatingRowColors(True)
+        queue_bar = QHBoxLayout()
+        self.queue_label = QLabel(self._t("console"))
+        self.queue_label.setObjectName("QueueLabel")
+        queue_bar.addWidget(self.queue_label)
+        queue_bar.addStretch(1)
+        self.expand_queue_btn = QPushButton(self._t("expand_table"))
+        self.expand_queue_btn.setObjectName("SecondaryButton")
+        self.expand_queue_btn.clicked.connect(self.open_queue_modal)
+        queue_bar.addWidget(self.expand_queue_btn)
+        c.addLayout(queue_bar)
+
 
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setObjectName("ConsoleArea")
-        c.addWidget(self.log_box, 2)
+
+        split = QSplitter(Qt.Vertical)
+        split.setChildrenCollapsible(False)
+        split.addWidget(self.queue_table)
+        split.addWidget(self.log_box)
+        split.setSizes([220, 260])  
+
+        c.addWidget(split, 3)
 
         main.addWidget(self.sidebar)
         main.addWidget(self.content, 1)
@@ -258,188 +317,154 @@ class MainWindow(QMainWindow):
         self.lang_combo.setCurrentIndex(idx)
 
     def apply_style(self):
-        # Better contrast, less “neon cringe”, more “product”
-        self.setStyleSheet("""
-        QMainWindow {
-            background: #0A0F16;
-            color: #E6EDF3;
-        }
-
-        #Sidebar, #Content {
-            background: #0E1622;
-            border: 1px solid #1B2A3D;
-            border-radius: 18px;
-        }
-
-        QLabel {
-            color: #E6EDF3;
-            font-size: 12px;
-            letter-spacing: 0.2px;
-        }
-
-        #BrandTitle {
-            font-size: 24px;
-            font-weight: 800;
-        }
-        #BrandSub {
-            color: #9AA4B2;
-            margin-bottom: 8px;
-        }
-
-        #Divider {
-            background: #1B2A3D;
-            margin: 8px 0 14px 0;
-        }
-
-        #H1 {
-            font-size: 18px;
-            font-weight: 800;
-        }
-        #H2 {
-            color: #9AA4B2;
-        }
-
-        #LangLabel { color: #9AA4B2; }
-        #LangCombo {
-            min-width: 140px;
-        }
-
-        QComboBox {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                        stop:0 #0B1422, stop:1 #070C14);
-            border: 1px solid #22344C;
-            border-left: 3px solid #00D4FF;
-            padding: 10px 14px;
-            border-radius: 14px;
-            color: #E6EDF3;
-            font-size: 13px;
-            font-weight: 600;
-            min-height: 44px;
-        }
-        QComboBox:hover { border-color: #2E4866; }
-        QComboBox:focus { border: 1px solid #00D4FF; }
-
-        QComboBox::drop-down {
-            border: none;
-            width: 44px;
-            background: #0E1622;
-            border-top-right-radius: 14px;
-            border-bottom-right-radius: 14px;
-        }
-        QComboBox QAbstractItemView {
-            background: #0A1018;
-            border: 1px solid #22344C;
-            selection-background-color: #11324B;
-            color: #E6EDF3;
-            outline: 0;
-            padding: 8px;
-        }
-
-        #Chip {
-            background: #0B111A;
-            border: 1px solid #1B2A3D;
-            padding: 10px 12px;
-            border-radius: 12px;
-            color: #9AA4B2;
-        }
-
-        #TextArea, #ConsoleArea {
-            background: #070B12;
-            border: 1px solid #1B2A3D;
-            border-radius: 14px;
-            padding: 12px;
-            color: #E6EDF3;
-            font-family: Consolas;
-            font-size: 12px;
-        }
-
-        /* Scrollbar (makes it feel premium) */
-        QScrollBar:vertical {
-            background: #0B111A;
-            width: 12px;
-            margin: 2px;
-            border-radius: 6px;
-        }
-        QScrollBar::handle:vertical {
-            background: #1B2A3D;
-            min-height: 24px;
-            border-radius: 6px;
-        }
-        QScrollBar::handle:vertical:hover {
-            background: #2B3E56;
-        }
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-            height: 0px;
-        }
-
-        #Progress {
-            background: #0B111A;
-            border: 1px solid #1B2A3D;
-            border-radius: 12px;
-            height: 14px;
-            text-align: center;
-            color: #9AA4B2;
-        }
-        QProgressBar::chunk {
-            border-radius: 12px;
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #00D4FF, stop:1 #A855F7
-            );
-        }
-        #NowLabel { color:#9AA4B2; font-size:12px; }
-        #PrimaryButton {
-            min-width: 170px;
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: #061018;
-            font-weight: 900;
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #FB7185, stop:1 #A855F7
-            );
-        }
-        #PrimaryButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #FF8DA1, stop:1 #B784FF
-            );
-        }
-        #PrimaryButton:disabled {
-            background: #253347;
-            color: #9AA4B2;
-        }
-
-        #SecondaryButton {
-            padding: 12px 16px;
-            border-radius: 14px;
-            color: #041018;
-            font-weight: 900;
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #00D4FF, stop:1 #22C55E
-            );
-        }
-        #SecondaryButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #34E7FF, stop:1 #34D399
-            );
-        }
-
-        #Status {
-            font-weight: 900;
-            font-size: 13px;
-            color: #34D399;
-        }
-        """)
-
+        self.setStyleSheet(main_qss())
     # ----------------- utils -----------------
-    def set_elided(self, label: QLabel, text: str):
-        fm = QFontMetrics(label.font())
-        elided = fm.elidedText(text, Qt.ElideLeft, label.width() - 10 if label.width() > 10 else 240)
-        label.setText(elided)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.set_elided(self.folder_chip, self.output_folder)
+        set_elided(self.folder_chip, self.output_folder)
 
     # ----------------- actions -----------------
+    def build_queue(self, urls: list[str], fmt: str):
+        self.queue_table.setRowCount(0)
+
+        for url in urls:
+            row = self.queue_table.rowCount()
+            self.queue_table.insertRow(row)
+
+            self.queue_table.setItem(row, 0, QTableWidgetItem(""))         # Title
+            self.queue_table.setItem(row, 1, QTableWidgetItem(url))        # URL
+            self.queue_table.setItem(row, 2, QTableWidgetItem(fmt))        # Format
+            self.queue_table.setItem(row, 5, QTableWidgetItem(""))         # Output
+
+            self._set_status_cell(row, "queued")
+            self._set_progress_cell(row, 0)
+
+        self.save_queue()  # persistency
+    def on_item_update(self, row: int, status_key: str, pct: int, title: str, out_file: str):
+        if title and self.queue_table.item(row, 0):
+            self.queue_table.item(row, 0).setText(title)
+
+        self._set_status_cell(row, status_key)
+        self._set_progress_cell(row, pct)
+
+        if out_file and self.queue_table.item(row, 5):
+            self.queue_table.item(row, 5).setText(out_file)
+
+        if status_key in ("done", "error", "cancelled") or pct in (0, 100):
+            self.save_queue()
+    def _set_status_cell(self, row: int, status_key: str):
+        item = self.queue_table.item(row, 3)
+        if not item:
+            item = QTableWidgetItem()
+            self.queue_table.setItem(row, 3, item)
+        item.setData(Qt.UserRole, status_key)
+
+        status_map = {
+            "queued": self._t("status_queued"),
+            "downloading": self._t("status_downloading"),
+            "done": self._t("status_done"),
+            "error": self._t("status_error"),
+            "cancelled": self._t("status_cancelled"),
+        }
+        item.setText(status_map.get(status_key, status_key))
+    def save_queue(self):
+        rows = []
+        for r in range(self.queue_table.rowCount()):
+            title = self.queue_table.item(r, 0).text() if self.queue_table.item(r, 0) else ""
+            url = self.queue_table.item(r, 1).text() if self.queue_table.item(r, 1) else ""
+            fmt = self.queue_table.item(r, 2).text() if self.queue_table.item(r, 2) else ""
+
+            status_item = self.queue_table.item(r, 3)
+            status_key = status_item.data(Qt.UserRole) if status_item else "queued"
+
+            prog_item = self.queue_table.item(r, 4)
+            pct = prog_item.data(Qt.UserRole) if prog_item else 0
+
+            outp = self.queue_table.item(r, 5).text() if self.queue_table.item(r, 5) else ""
+
+            rows.append({
+                "title": title,
+                "url": url,
+                "format": fmt,
+                "status": status_key,
+                "progress": int(pct) if pct is not None else 0,
+                "output": outp,
+            })
+
+        self._settings_set("ui/queue_history", json.dumps(rows, ensure_ascii=False))
+
+    def load_queue(self):
+        raw = self._settings_get("ui/queue_history", "")
+        if not raw:
+            return
+        try:
+            rows = json.loads(raw)
+        except Exception:
+            return
+
+        self.queue_table.setRowCount(0)
+        for x in rows:
+            row = self.queue_table.rowCount()
+            self.queue_table.insertRow(row)
+
+            self.queue_table.setItem(row, 0, QTableWidgetItem(x.get("title", "")))
+            self.queue_table.setItem(row, 1, QTableWidgetItem(x.get("url", "")))
+            self.queue_table.setItem(row, 2, QTableWidgetItem(x.get("format", "")))
+            self.queue_table.setItem(row, 5, QTableWidgetItem(x.get("output", "")))
+
+            self._set_status_cell(row, x.get("status", "queued"))
+            self._set_progress_cell(row, x.get("progress", 0))
+    def open_queue_modal(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle(self._t("downloads_queue"))
+        dlg.resize(1100, 650)
+
+        lay = QVBoxLayout(dlg)
+
+        t = QTableWidget(self.queue_table.rowCount(), self.queue_table.columnCount())
+        t.setHorizontalHeaderLabels([
+            self._t("col_title"),
+            self._t("col_url"),
+            self._t("col_format"),
+            self._t("col_status"),
+            self._t("col_progress"),
+            self._t("col_output"),
+        ])
+        t.verticalHeader().setVisible(False)
+        t.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        t.setSelectionBehavior(QAbstractItemView.SelectRows)
+        t.setAlternatingRowColors(True)
+
+        # copiar contenido (incluye UserRole)
+        for r in range(self.queue_table.rowCount()):
+            for c in range(self.queue_table.columnCount()):
+                src = self.queue_table.item(r, c)
+                if not src:
+                    continue
+                dst = QTableWidgetItem(src.text())
+                dst.setData(Qt.UserRole, src.data(Qt.UserRole))
+                t.setItem(r, c, dst)
+
+        hdr = t.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(5, QHeaderView.Stretch)
+
+        lay.addWidget(t)
+        dlg.exec()
+    def _set_progress_cell(self, row: int, pct: int):
+        pct = max(0, min(100, int(pct)))
+        item = self.queue_table.item(row, 4)
+        if not item:
+            item = QTableWidgetItem()
+            self.queue_table.setItem(row, 4, item)
+        item.setData(Qt.UserRole, pct)
+        item.setText(f"{pct}%")
+
     def on_lang_change(self):
         lang = self.lang_combo.currentData()
         self.apply_language(lang)
@@ -452,10 +477,15 @@ class MainWindow(QMainWindow):
         if folder:
             self.output_folder = folder
             self.downloader.output_path = folder
-            self.settings.setValue("output_folder", folder)
-            self.set_elided(self.folder_chip, folder)
+            self.settings.set_output_folder(folder)
+            set_elided(self.folder_chip, folder)
             self.add_log(self._tf("output_set", folder=folder))
-
+    def open_output_folder(self):
+        folder = self.output_folder
+        if folder and os.path.isdir(folder):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+        else:
+            QMessageBox.warning(self, self._t("error"), self._t("folder_not_found"))
     def set_status(self, key: str):
         self.status_key = key
         if key == "downloading":
@@ -470,9 +500,10 @@ class MainWindow(QMainWindow):
         if not urls:
             QMessageBox.warning(self, self._t("no_urls_title"), self._t("no_urls_body"))
             return
-
         fmt = self.format_box.currentText()
         q = self.quality_box.currentText()
+
+        self.build_queue(urls, fmt)
 
         self.download_btn.setEnabled(False)
         self.download_btn.setText(self._t("downloading"))
@@ -488,7 +519,7 @@ class MainWindow(QMainWindow):
         self.worker.progress.connect(self.progress_bar.setValue)
         self.worker.status_key.connect(self.set_status)
         self.worker.log_event.connect(self.on_log_event)
-
+        self.worker.item_update.connect(self.on_item_update)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
