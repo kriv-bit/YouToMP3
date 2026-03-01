@@ -10,7 +10,17 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QDialog, QVBoxLayout,
 )
-from PySide6.QtGui import Qt
+from PySide6.QtGui import Qt, QColor
+
+
+# Status → (foreground, background)
+STATUS_COLORS = {
+    "queued":      (QColor("#8899AA"), QColor("#131D2A")),
+    "downloading": (QColor("#F59E0B"), QColor("#1E1A0D")),
+    "done":        (QColor("#34D399"), QColor("#0D1E16")),
+    "error":       (QColor("#F87171"), QColor("#1E0D0D")),
+    "cancelled":   (QColor("#6B7280"), QColor("#151515")),
+}
 
 
 class QueueManager:
@@ -65,6 +75,11 @@ class QueueManager:
         self._table.setItem(row, 2, QTableWidgetItem(fmt))       # Format
         self._table.setItem(row, 5, QTableWidgetItem(out_file))  # Output
 
+        # Set tooltips for long-text columns
+        self._table.item(row, 0).setToolTip(title)
+        self._table.item(row, 1).setToolTip(url)
+        self._table.item(row, 5).setToolTip(out_file)
+
         self._set_status_cell(row, status_key)
         self._set_progress_cell(row, pct)
 
@@ -105,12 +120,14 @@ class QueueManager:
         """Update a single row from a Worker signal."""
         if title and self._table.item(row, 0):
             self._table.item(row, 0).setText(title)
+            self._table.item(row, 0).setToolTip(title)
 
         self._set_status_cell(row, status_key)
         self._set_progress_cell(row, pct)
 
         if out_file and self._table.item(row, 5):
             self._table.item(row, 5).setText(out_file)
+            self._table.item(row, 5).setToolTip(out_file)
 
         if settings_set_fn and (status_key in ("done", "error", "cancelled") or pct in (0, 100)):
             self.save(settings_set_fn)
@@ -159,10 +176,23 @@ class QueueManager:
             row = self._table.rowCount()
             self._table.insertRow(row)
 
-            self._table.setItem(row, 0, QTableWidgetItem(x.get("title", "")))
-            self._table.setItem(row, 1, QTableWidgetItem(x.get("url", "")))
+            title = x.get("title", "")
+            url = x.get("url", "")
+            outp = x.get("output", "")
+
+            item_title = QTableWidgetItem(title)
+            item_title.setToolTip(title)
+            self._table.setItem(row, 0, item_title)
+
+            item_url = QTableWidgetItem(url)
+            item_url.setToolTip(url)
+            self._table.setItem(row, 1, item_url)
+
             self._table.setItem(row, 2, QTableWidgetItem(x.get("format", "")))
-            self._table.setItem(row, 5, QTableWidgetItem(x.get("output", "")))
+
+            item_out = QTableWidgetItem(outp)
+            item_out.setToolTip(outp)
+            self._table.setItem(row, 5, item_out)
 
             self._set_status_cell(row, x.get("status", "queued"))
             self._set_progress_cell(row, x.get("progress", 0))
@@ -172,12 +202,14 @@ class QueueManager:
     def open_modal(self, parent):
         """Open a read-only expanded view of the queue in a modal dialog."""
         dlg = QDialog(parent)
+        dlg.setObjectName("AppDialog")
         dlg.setWindowTitle(self._t("downloads_queue"))
         dlg.resize(1100, 650)
 
         lay = QVBoxLayout(dlg)
 
         t = QTableWidget(self._table.rowCount(), self._table.columnCount())
+        t.setObjectName("QueueTable")
         t.setHorizontalHeaderLabels([
             self._t("col_title"),
             self._t("col_url"),
@@ -191,7 +223,7 @@ class QueueManager:
         t.setSelectionBehavior(QAbstractItemView.SelectRows)
         t.setAlternatingRowColors(True)
 
-        # Copy content (including UserRole data)
+        # Copy content (including UserRole data and colors)
         for r in range(self._table.rowCount()):
             for c in range(self._table.columnCount()):
                 src = self._table.item(r, c)
@@ -199,6 +231,9 @@ class QueueManager:
                     continue
                 dst = QTableWidgetItem(src.text())
                 dst.setData(Qt.UserRole, src.data(Qt.UserRole))
+                dst.setForeground(src.foreground())
+                dst.setBackground(src.background())
+                dst.setToolTip(src.toolTip())
                 t.setItem(r, c, dst)
 
         hdr = t.horizontalHeader()
@@ -230,6 +265,17 @@ class QueueManager:
         }
         item.setText(status_map.get(status_key, status_key))
 
+        # Apply colors to status cell and the progress cell
+        fg, bg = STATUS_COLORS.get(status_key, STATUS_COLORS["queued"])
+        item.setForeground(fg)
+        item.setBackground(bg)
+
+        # Also color the progress cell
+        prog_item = self._table.item(row, 4)
+        if prog_item:
+            prog_item.setForeground(fg)
+            prog_item.setBackground(bg)
+
     def _set_progress_cell(self, row: int, pct: int):
         pct = max(0, min(100, int(pct)))
         item = self._table.item(row, 4)
@@ -238,3 +284,11 @@ class QueueManager:
             self._table.setItem(row, 4, item)
         item.setData(Qt.UserRole, pct)
         item.setText(f"{pct}%")
+
+        # Apply colors matching status
+        status_item = self._table.item(row, 3)
+        if status_item:
+            sk = status_item.data(Qt.UserRole) or "queued"
+            fg, bg = STATUS_COLORS.get(sk, STATUS_COLORS["queued"])
+            item.setForeground(fg)
+            item.setBackground(bg)

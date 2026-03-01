@@ -17,16 +17,18 @@ from app.ui.style import main_qss
 from app.ui.settings import AppSettings
 from app.ui.queue_manager import QueueManager
 from app.ui.controller import MainController
+from app.ui.now_downloading import NowDownloadingCard
 
 
 class MainWindow(QMainWindow):
     """Top-level application window.
 
-    Responsibilities limited to:
-    - Widget construction and layout (``build_ui``)
-    - i18n binding / language switching
-    - Delegating actions to :class:`MainController`
-    - Delegating queue operations to :class:`QueueManager`
+    Layout (content area):
+    - Top bar: H1/H2 + language toggle
+    - Progress bar + Download button
+    - Two-column body:
+      - Left: action buttons + Now Downloading card + console
+      - Right: queue table (priority space)
     """
 
     # ---- lifecycle ----
@@ -46,7 +48,7 @@ class MainWindow(QMainWindow):
         self.worker = None
 
         self.setWindowTitle(TRANSLATIONS[self.lang]["app_name"])
-        self.setMinimumSize(1040, 680)
+        self.setMinimumSize(1120, 720)
 
         app_font = QFont("Segoe UI Variable", 10)
         if not app_font.exactMatch():
@@ -105,6 +107,9 @@ class MainWindow(QMainWindow):
         # Update queue manager translation
         self.queue.set_t(self._t)
         self.queue.refresh_headers()
+
+        # Update now downloading card translation
+        self.now_card.set_t(self._t)
 
         # Update dynamic fields
         self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
@@ -236,7 +241,7 @@ class MainWindow(QMainWindow):
         c.setSpacing(12)
         c.setContentsMargins(18, 16, 18, 16)
 
-        # Top bar (title + language toggle)
+        # ── Top bar (title + language toggle) ──
         top = QHBoxLayout()
         left = QVBoxLayout()
         left.setSpacing(2)
@@ -269,32 +274,7 @@ class MainWindow(QMainWindow):
         top.addLayout(lang_box)
         c.addLayout(top)
 
-        # Action buttons: Add Song / Add Playlist / Paste Batch
-        action_row = QHBoxLayout()
-        action_row.setSpacing(10)
-
-        self.btn_add_song = QPushButton()
-        self._bind_text(self.btn_add_song, "add_song")
-        self.btn_add_song.setObjectName("SecondaryButton")
-        self.btn_add_song.clicked.connect(lambda: self.ctrl.open_add_song_dialog())
-
-        self.btn_add_playlist = QPushButton()
-        self._bind_text(self.btn_add_playlist, "add_playlist")
-        self.btn_add_playlist.setObjectName("SecondaryButton")
-        self.btn_add_playlist.clicked.connect(lambda: self.ctrl.open_add_playlist_dialog())
-
-        self.btn_paste_batch = QPushButton()
-        self._bind_text(self.btn_paste_batch, "paste_batch")
-        self.btn_paste_batch.setObjectName("SecondaryButton")
-        self.btn_paste_batch.clicked.connect(lambda: self.ctrl.open_paste_batch_dialog())
-
-        action_row.addWidget(self.btn_add_song)
-        action_row.addWidget(self.btn_add_playlist)
-        action_row.addStretch(1)
-        action_row.addWidget(self.btn_paste_batch)
-        c.addLayout(action_row)
-
-        # Progress bar + Download button
+        # ── Progress bar + Download button ──
         actions = QHBoxLayout()
         actions.setSpacing(12)
 
@@ -315,6 +295,77 @@ class MainWindow(QMainWindow):
         self.now_label.setObjectName("NowLabel")
         c.addWidget(self.now_label)
 
+        # ══ Two-column body ══
+        body_splitter = QSplitter(Qt.Horizontal)
+        body_splitter.setChildrenCollapsible(False)
+
+        # ── LEFT COLUMN: action buttons + card + console ──
+        left_panel = QFrame()
+        left_lay = QVBoxLayout(left_panel)
+        left_lay.setContentsMargins(0, 0, 0, 0)
+        left_lay.setSpacing(10)
+
+        # Action buttons
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+
+        self.btn_add_song = QPushButton()
+        self._bind_text(self.btn_add_song, "add_song")
+        self.btn_add_song.setObjectName("SecondaryButton")
+        self.btn_add_song.clicked.connect(lambda: self.ctrl.open_add_song_dialog())
+
+        self.btn_add_playlist = QPushButton()
+        self._bind_text(self.btn_add_playlist, "add_playlist")
+        self.btn_add_playlist.setObjectName("SecondaryButton")
+        self.btn_add_playlist.clicked.connect(lambda: self.ctrl.open_add_playlist_dialog())
+
+        self.btn_paste_batch = QPushButton()
+        self._bind_text(self.btn_paste_batch, "paste_batch")
+        self.btn_paste_batch.setObjectName("SecondaryButton")
+        self.btn_paste_batch.clicked.connect(lambda: self.ctrl.open_paste_batch_dialog())
+
+        action_row.addWidget(self.btn_add_song)
+        action_row.addWidget(self.btn_add_playlist)
+        action_row.addWidget(self.btn_paste_batch)
+        left_lay.addLayout(action_row)
+
+        # Now Downloading card
+        self.now_card = NowDownloadingCard(t_fn=self._t, parent=self)
+        left_lay.addWidget(self.now_card)
+
+        # Console log
+        console_label = QLabel()
+        console_label.setObjectName("SectionLabel")
+        self._bind_text(console_label, "console")
+        left_lay.addWidget(console_label)
+
+        self.log_box = QTextEdit()
+        self.log_box.setReadOnly(True)
+        self.log_box.setObjectName("ConsoleArea")
+        left_lay.addWidget(self.log_box, 1)
+
+        body_splitter.addWidget(left_panel)
+
+        # ── RIGHT COLUMN: queue table ──
+        right_panel = QFrame()
+        right_lay = QVBoxLayout(right_panel)
+        right_lay.setContentsMargins(0, 0, 0, 0)
+        right_lay.setSpacing(6)
+
+        queue_bar = QHBoxLayout()
+        self.queue_label = QLabel()
+        self.queue_label.setObjectName("SectionLabel")
+        self._bind_text(self.queue_label, "queue")
+        queue_bar.addWidget(self.queue_label)
+        queue_bar.addStretch(2)
+
+        self.expand_queue_btn = QPushButton(self._t("expand_table"))
+        self.expand_queue_btn.setObjectName("SecondaryButton")
+        self.expand_queue_btn.clicked.connect(lambda: self.queue.open_modal(self))
+        queue_bar.addWidget(self.expand_queue_btn)
+
+        right_lay.addLayout(queue_bar)
+
         # Queue Table
         self.queue_table = QTableWidget(0, 6)
         self.queue_table.setObjectName("QueueTable")
@@ -327,43 +378,29 @@ class MainWindow(QMainWindow):
             self._t("col_output"),
         ])
         hdr = self.queue_table.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.Stretch)          # title
-        hdr.setSectionResizeMode(1, QHeaderView.Stretch)          # url
+        hdr.setSectionResizeMode(0, QHeaderView.Stretch)           # title
+        hdr.setSectionResizeMode(1, QHeaderView.Stretch)           # url
         hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # format
         hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # status
         hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # progress
-        hdr.setSectionResizeMode(5, QHeaderView.Stretch)          # output
+        hdr.setSectionResizeMode(5, QHeaderView.Stretch)           # output
 
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.queue_table.setAlternatingRowColors(True)
         self.queue_table.verticalHeader().setVisible(False)
-        self.queue_table.setShowGrid(True)
+        self.queue_table.setShowGrid(False)
 
-        queue_bar = QHBoxLayout()
-        self.queue_label = QLabel(self._t("console"))
-        self.queue_label.setObjectName("QueueLabel")
-        queue_bar.addWidget(self.queue_label)
-        queue_bar.addStretch(1)
+        right_lay.addWidget(self.queue_table, 1)
 
-        self.expand_queue_btn = QPushButton(self._t("expand_table"))
-        self.expand_queue_btn.setObjectName("SecondaryButton")
-        self.expand_queue_btn.clicked.connect(lambda: self.queue.open_modal(self))
-        queue_bar.addWidget(self.expand_queue_btn)
+        body_splitter.addWidget(right_panel)
 
-        c.addLayout(queue_bar)
+        # Give right column (table) more space: ~40% left, ~60% right
+        body_splitter.setSizes([380, 560])
+        body_splitter.setStretchFactor(0, 2)
+        body_splitter.setStretchFactor(1, 3)
 
-        self.log_box = QTextEdit()
-        self.log_box.setReadOnly(True)
-        self.log_box.setObjectName("ConsoleArea")
-
-        split = QSplitter(Qt.Vertical)
-        split.setChildrenCollapsible(False)
-        split.addWidget(self.queue_table)
-        split.addWidget(self.log_box)
-        split.setSizes([220, 260])
-
-        c.addWidget(split, 3)
+        c.addWidget(body_splitter, 1)
 
     # ---- style ----
 
