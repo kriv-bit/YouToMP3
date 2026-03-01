@@ -36,7 +36,7 @@ class MediaDownloader:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         return {
-            "outtmpl": str(out_dir / "%(title)s.%(ext)s"),
+            "outtmpl": str(out_dir / "%(title).180s [%(id)s].%(ext)s"),
             "noplaylist": True,
             "windowsfilenames": True,
             "retries": 3,
@@ -77,7 +77,9 @@ class MediaDownloader:
                     {"key": "EmbedThumbnail"},
                     {"key": "FFmpegMetadata"},
                 ],
-                "postprocessor_args": ["-id3v2_version", "3"],
+                "postprocessor_args": {
+    "FFmpegExtractAudio": ["-id3v2_version", "3"],
+},
             }
             r = self._try_download_with_fallback(url, opts)
             base_path = r.get("base_path", "")
@@ -88,8 +90,11 @@ class MediaDownloader:
             opts = {
                 **base,
                 "format": "bestaudio/best",
+                "writethumbnail": True,
                 "postprocessors": [
                     {"key": "FFmpegExtractAudio", "preferredcodec": "m4a", "preferredquality": str(quality)},
+                    {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
+                    {"key": "EmbedThumbnail"},
                     {"key": "FFmpegMetadata"},
                 ],
             }
