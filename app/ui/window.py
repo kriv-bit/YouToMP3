@@ -1,25 +1,140 @@
 # app/ui/window.py
 import os
+import json
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
     QLabel, QFileDialog, QComboBox, QProgressBar, QMessageBox, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QSplitter, QDialog
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QSplitter,
+    QDialog, QLineEdit, QCheckBox, QSpinBox
 )
 from PySide6.QtCore import QThread, QUrl
 from PySide6.QtGui import QFont, QIcon, QDesktopServices, Qt
+
 from app.downloader import MediaDownloader
 from app.ui.worker import DownloadWorker
 from app.ui.i18n import TRANSLATIONS
 from app.ui.widgets import add_shadow, set_elided
 from app.ui.style import main_qss
 from app.ui.settings import AppSettings
-import json
+
+
+# ----------------- Dialogs -----------------
+
+class AddSongDialog(QDialog):
+    def __init__(self, parent=None, t=lambda k, **kw: k):
+        super().__init__(parent)
+        self.t = t
+        self.setWindowTitle(self.t("add_song"))
+        self.resize(560, 170)
+
+        lay = QVBoxLayout(self)
+
+        lay.addWidget(QLabel(self.t("song_url")))
+        self.url_edit = QLineEdit()
+        self.url_edit.setPlaceholderText(self.t("enter_url"))
+        lay.addWidget(self.url_edit)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        self.btn_cancel = QPushButton(self.t("cancel"))
+        self.btn_add = QPushButton(self.t("add"))
+        self.btn_add.setObjectName("PrimaryButton")
+        self.btn_cancel.setObjectName("SecondaryButton")
+        self.btn_cancel.clicked.connect(self.reject)
+        self.btn_add.clicked.connect(self.accept)
+        btn_row.addWidget(self.btn_cancel)
+        btn_row.addWidget(self.btn_add)
+        lay.addLayout(btn_row)
+
+    def url(self) -> str:
+        return self.url_edit.text().strip()
+
+
+class AddPlaylistDialog(QDialog):
+    def __init__(self, parent=None, t=lambda k, **kw: k):
+        super().__init__(parent)
+        self.t = t
+        self.setWindowTitle(self.t("add_playlist"))
+        self.resize(620, 240)
+
+        lay = QVBoxLayout(self)
+
+        lay.addWidget(QLabel(self.t("playlist_url")))
+        self.url_edit = QLineEdit()
+        self.url_edit.setPlaceholderText(self.t("enter_playlist_url"))
+        lay.addWidget(self.url_edit)
+
+        self.chk_expand = QCheckBox(self.t("expand_now"))
+        self.chk_expand.setChecked(True)
+        lay.addWidget(self.chk_expand)
+
+        limit_row = QHBoxLayout()
+        limit_row.addWidget(QLabel(self.t("max_items")))
+        self.spin_limit = QSpinBox()
+        self.spin_limit.setRange(1, 5000)
+        self.spin_limit.setValue(200)
+        limit_row.addWidget(self.spin_limit)
+        limit_row.addStretch(1)
+        lay.addLayout(limit_row)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        self.btn_cancel = QPushButton(self.t("cancel"))
+        self.btn_add = QPushButton(self.t("add"))
+        self.btn_add.setObjectName("PrimaryButton")
+        self.btn_cancel.setObjectName("SecondaryButton")
+        self.btn_cancel.clicked.connect(self.reject)
+        self.btn_add.clicked.connect(self.accept)
+        btn_row.addWidget(self.btn_cancel)
+        btn_row.addWidget(self.btn_add)
+        lay.addLayout(btn_row)
+
+    def data(self) -> dict:
+        return {
+            "url": self.url_edit.text().strip(),
+            "expand": self.chk_expand.isChecked(),
+            "limit": int(self.spin_limit.value()),
+        }
+
+
+class PasteBatchDialog(QDialog):
+    def __init__(self, parent=None, t=lambda k, **kw: k):
+        super().__init__(parent)
+        self.t = t
+        self.setWindowTitle(self.t("paste_batch"))
+        self.resize(780, 420)
+
+        lay = QVBoxLayout(self)
+
+        self.text = QTextEdit()
+        self.text.setObjectName("TextArea")
+        self.text.setPlaceholderText("https://youtu.be/VIDEO_ID\nhttps://youtu.be/ANOTHER_ID")
+        lay.addWidget(self.text, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        self.btn_cancel = QPushButton(self.t("cancel"))
+        self.btn_add = QPushButton(self.t("add"))
+        self.btn_add.setObjectName("PrimaryButton")
+        self.btn_cancel.setObjectName("SecondaryButton")
+        self.btn_cancel.clicked.connect(self.reject)
+        self.btn_add.clicked.connect(self.accept)
+        btn_row.addWidget(self.btn_cancel)
+        btn_row.addWidget(self.btn_add)
+        lay.addLayout(btn_row)
+
+    def urls(self) -> list[str]:
+        return [u.strip() for u in self.text.toPlainText().splitlines() if u.strip()]
+
+
+# ----------------- Main Window -----------------
 
 class MainWindow(QMainWindow):
     def closeEvent(self, event):
-            self.save_queue()
-            self.settings.save_geometry(self)
-            super().closeEvent(event)
+        self.save_queue()
+        self.settings.save_geometry(self)
+        super().closeEvent(event)
+
     def __init__(self):
         super().__init__()
 
@@ -27,6 +142,7 @@ class MainWindow(QMainWindow):
         self.settings = AppSettings()
         self.lang = self.settings.get_language()
         self.output_folder = self.settings.get_output_folder()
+
         self.setWindowIcon(QIcon(os.path.join("assets", "icon.ico")))
         self.downloader = MediaDownloader(output_path=self.output_folder)
 
@@ -40,8 +156,6 @@ class MainWindow(QMainWindow):
         if not app_font.exactMatch():
             app_font = QFont("Segoe UI", 10)
         self.setFont(app_font)
-
-
 
         self._i18n_bindings = []  # list of (widget, key, attr)
 
@@ -76,6 +190,7 @@ class MainWindow(QMainWindow):
         for w, key, attr in self._i18n_bindings:
             if attr == "text":
                 w.setText(self._t(key))
+
         # Update table headers
         if hasattr(self, "queue_table"):
             self.queue_table.setHorizontalHeaderLabels([
@@ -86,23 +201,24 @@ class MainWindow(QMainWindow):
                 self._t("col_progress"),
                 self._t("col_output"),
             ])
+
         # Update dynamic fields
         self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
-        self.url_box.setPlaceholderText("https://youtu.be/VIDEO_ID\nhttps://youtu.be/ANOTHER_ID")
         self.lang_label.setText(self._t("language"))
 
-        # Keep download button state text consistent
         if self.download_btn.isEnabled():
             self.download_btn.setText(self._t("download"))
         else:
             self.download_btn.setText(self._t("downloading"))
+
     def _settings_get(self, key: str, default=None):
-        s = getattr(self.settings, "qs", self.settings) 
+        s = getattr(self.settings, "qs", self.settings)
         return s.value(key, default)
 
     def _settings_set(self, key: str, value):
         s = getattr(self.settings, "qs", self.settings)
         s.setValue(key, value)
+
     # ---------------- UI ----------------
     def build_ui(self):
         root = QWidget()
@@ -122,7 +238,6 @@ class MainWindow(QMainWindow):
 
         self.brand = QLabel("YouToMp3")
         self.brand.setObjectName("BrandTitle")
-
         self.brand_sub = QLabel("Desktop Media Downloader")
         self.brand_sub.setObjectName("BrandSub")
 
@@ -140,7 +255,7 @@ class MainWindow(QMainWindow):
         s.addWidget(self.lbl_format)
 
         self.format_box = QComboBox()
-        self.format_box.addItems(["mp3","wav","m4a"])
+        self.format_box.addItems(["mp3", "wav", "m4a"])
         s.addWidget(self.format_box)
 
         # Quality
@@ -203,11 +318,11 @@ class MainWindow(QMainWindow):
 
         self.h1 = QLabel()
         self.h1.setObjectName("H1")
-        self._bind_text(self.h1, "paste_urls")
+        self._bind_text(self.h1, "paste_urls")  # puedes renombrar key a "add_media" si quieres
 
         self.h2 = QLabel()
         self.h2.setObjectName("H2")
-        self._bind_text(self.h2, "one_per_line")
+        self._bind_text(self.h2, "one_per_line")  # si te molesta el texto, cambia key en i18n
 
         left.addWidget(self.h1)
         left.addWidget(self.h2)
@@ -230,12 +345,33 @@ class MainWindow(QMainWindow):
         top.addLayout(lang_box)
         c.addLayout(top)
 
-        # URL area
-        self.url_box = QTextEdit()
-        self.url_box.setObjectName("TextArea")
-        c.addWidget(self.url_box, 2)
+        # -------- Actions: Add Song / Add Playlist / Paste Batch --------
+        action_row = QHBoxLayout()
+        action_row.setSpacing(10)
 
-        # Actions row
+        self.btn_add_song = QPushButton()
+        self._bind_text(self.btn_add_song, "add_song")
+        self.btn_add_song.setObjectName("SecondaryButton")
+        self.btn_add_song.clicked.connect(self.open_add_song_dialog)
+
+        self.btn_add_playlist = QPushButton()
+        self._bind_text(self.btn_add_playlist, "add_playlist")
+        self.btn_add_playlist.setObjectName("SecondaryButton")
+        self.btn_add_playlist.clicked.connect(self.open_add_playlist_dialog)
+
+        self.btn_paste_batch = QPushButton()
+        self._bind_text(self.btn_paste_batch, "paste_batch")
+        self.btn_paste_batch.setObjectName("SecondaryButton")
+        self.btn_paste_batch.clicked.connect(self.open_paste_batch_dialog)
+
+        action_row.addWidget(self.btn_add_song)
+        action_row.addWidget(self.btn_add_playlist)
+        action_row.addStretch(1)
+        action_row.addWidget(self.btn_paste_batch)
+
+        c.addLayout(action_row)
+
+        # Actions row (progress + download)
         actions = QHBoxLayout()
         actions.setSpacing(12)
 
@@ -244,9 +380,6 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setObjectName("Progress")
         actions.addWidget(self.progress_bar, 1)
-        self.now_label = QLabel("")
-        self.now_label.setObjectName("NowLabel")
-        c.addWidget(self.now_label)
 
         self.download_btn = QPushButton()
         self.download_btn.setObjectName("PrimaryButton")
@@ -254,6 +387,10 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.download_btn)
 
         c.addLayout(actions)
+
+        self.now_label = QLabel("")
+        self.now_label.setObjectName("NowLabel")
+        c.addWidget(self.now_label)
 
         # Queue Table
         self.queue_table = QTableWidget(0, 6)
@@ -273,24 +410,25 @@ class MainWindow(QMainWindow):
         hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents) # status
         hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents) # progress
         hdr.setSectionResizeMode(5, QHeaderView.Stretch)          # output
+
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.queue_table.setAlternatingRowColors(True)
-        self.queue_table.setObjectName("QueueTable")
-        self.queue_table.verticalHeader().setVisible(False)  
-        self.queue_table.setShowGrid(True)  
-        self.queue_table.setAlternatingRowColors(True)
+        self.queue_table.verticalHeader().setVisible(False)
+        self.queue_table.setShowGrid(True)
+
         queue_bar = QHBoxLayout()
         self.queue_label = QLabel(self._t("console"))
         self.queue_label.setObjectName("QueueLabel")
         queue_bar.addWidget(self.queue_label)
         queue_bar.addStretch(1)
+
         self.expand_queue_btn = QPushButton(self._t("expand_table"))
         self.expand_queue_btn.setObjectName("SecondaryButton")
         self.expand_queue_btn.clicked.connect(self.open_queue_modal)
         queue_bar.addWidget(self.expand_queue_btn)
-        c.addLayout(queue_bar)
 
+        c.addLayout(queue_bar)
 
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
@@ -300,7 +438,7 @@ class MainWindow(QMainWindow):
         split.setChildrenCollapsible(False)
         split.addWidget(self.queue_table)
         split.addWidget(self.log_box)
-        split.setSizes([220, 260])  
+        split.setSizes([220, 260])
 
         c.addWidget(split, 3)
 
@@ -318,29 +456,56 @@ class MainWindow(QMainWindow):
 
     def apply_style(self):
         self.setStyleSheet(main_qss())
-    # ----------------- utils -----------------
 
+    # ----------------- utils -----------------
     def resizeEvent(self, event):
         super().resizeEvent(event)
         set_elided(self.folder_chip, self.output_folder)
 
-    # ----------------- actions -----------------
+    def on_lang_change(self):
+        lang = self.lang_combo.currentData()
+        self.apply_language(lang)
+
+    def add_log(self, text: str):
+        self.log_box.append(text)
+
+    # ----------------- queue helpers -----------------
+
+    def add_queue_row(self, url: str, fmt: str, title: str = "", status_key: str = "queued", pct: int = 0, out_file: str = ""):
+        row = self.queue_table.rowCount()
+        self.queue_table.insertRow(row)
+
+        self.queue_table.setItem(row, 0, QTableWidgetItem(title))   # Title
+        self.queue_table.setItem(row, 1, QTableWidgetItem(url))     # URL
+        self.queue_table.setItem(row, 2, QTableWidgetItem(fmt))     # Format
+        self.queue_table.setItem(row, 5, QTableWidgetItem(out_file))# Output
+
+        self._set_status_cell(row, status_key)
+        self._set_progress_cell(row, pct)
+
+        self.save_queue()
+
     def build_queue(self, urls: list[str], fmt: str):
+        """(legacy) resetea y construye. Ahora preferimos add_queue_row()."""
         self.queue_table.setRowCount(0)
-
         for url in urls:
-            row = self.queue_table.rowCount()
-            self.queue_table.insertRow(row)
+            self.add_queue_row(url=url, fmt=fmt, status_key="queued", pct=0)
+        self.save_queue()
 
-            self.queue_table.setItem(row, 0, QTableWidgetItem(""))         # Title
-            self.queue_table.setItem(row, 1, QTableWidgetItem(url))        # URL
-            self.queue_table.setItem(row, 2, QTableWidgetItem(fmt))        # Format
-            self.queue_table.setItem(row, 5, QTableWidgetItem(""))         # Output
+    def get_queued_rows(self) -> list[tuple[int, str, str]]:
+        """Return list of (row_index, url, fmt) for queued items."""
+        out = []
+        for r in range(self.queue_table.rowCount()):
+            status_item = self.queue_table.item(r, 3)
+            status_key = status_item.data(Qt.UserRole) if status_item else "queued"
+            if status_key != "queued":
+                continue
+            url = self.queue_table.item(r, 1).text() if self.queue_table.item(r, 1) else ""
+            fmt = self.queue_table.item(r, 2).text() if self.queue_table.item(r, 2) else self.format_box.currentText()
+            if url.strip():
+                out.append((r, url.strip(), fmt))
+        return out
 
-            self._set_status_cell(row, "queued")
-            self._set_progress_cell(row, 0)
-
-        self.save_queue()  # persistency
     def on_item_update(self, row: int, status_key: str, pct: int, title: str, out_file: str):
         if title and self.queue_table.item(row, 0):
             self.queue_table.item(row, 0).setText(title)
@@ -353,6 +518,7 @@ class MainWindow(QMainWindow):
 
         if status_key in ("done", "error", "cancelled") or pct in (0, 100):
             self.save_queue()
+
     def _set_status_cell(self, row: int, status_key: str):
         item = self.queue_table.item(row, 3)
         if not item:
@@ -368,6 +534,18 @@ class MainWindow(QMainWindow):
             "cancelled": self._t("status_cancelled"),
         }
         item.setText(status_map.get(status_key, status_key))
+
+    def _set_progress_cell(self, row: int, pct: int):
+        pct = max(0, min(100, int(pct)))
+        item = self.queue_table.item(row, 4)
+        if not item:
+            item = QTableWidgetItem()
+            self.queue_table.setItem(row, 4, item)
+        item.setData(Qt.UserRole, pct)
+        item.setText(f"{pct}%")
+
+    # ----------------- persistence -----------------
+
     def save_queue(self):
         rows = []
         for r in range(self.queue_table.rowCount()):
@@ -415,6 +593,7 @@ class MainWindow(QMainWindow):
 
             self._set_status_cell(row, x.get("status", "queued"))
             self._set_progress_cell(row, x.get("progress", 0))
+
     def open_queue_modal(self):
         dlg = QDialog(self)
         dlg.setWindowTitle(self._t("downloads_queue"))
@@ -456,21 +635,8 @@ class MainWindow(QMainWindow):
 
         lay.addWidget(t)
         dlg.exec()
-    def _set_progress_cell(self, row: int, pct: int):
-        pct = max(0, min(100, int(pct)))
-        item = self.queue_table.item(row, 4)
-        if not item:
-            item = QTableWidgetItem()
-            self.queue_table.setItem(row, 4, item)
-        item.setData(Qt.UserRole, pct)
-        item.setText(f"{pct}%")
 
-    def on_lang_change(self):
-        lang = self.lang_combo.currentData()
-        self.apply_language(lang)
-
-    def add_log(self, text: str):
-        self.log_box.append(text)
+    # ----------------- actions -----------------
 
     def select_folder(self):
         folder = QFileDialog.getExistingDirectory(self, self._t("select_folder"))
@@ -480,12 +646,14 @@ class MainWindow(QMainWindow):
             self.settings.set_output_folder(folder)
             set_elided(self.folder_chip, folder)
             self.add_log(self._tf("output_set", folder=folder))
+
     def open_output_folder(self):
         folder = self.output_folder
         if folder and os.path.isdir(folder):
             QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
         else:
             QMessageBox.warning(self, self._t("error"), self._t("folder_not_found"))
+
     def set_status(self, key: str):
         self.status_key = key
         if key == "downloading":
@@ -495,15 +663,122 @@ class MainWindow(QMainWindow):
             self.status_value.setText(self._t("idle"))
             self.status_value.setStyleSheet("color:#34D399; font-weight:900; font-size:13px;")
 
-    def start_download(self):
-        urls = [u.strip() for u in self.url_box.toPlainText().splitlines() if u.strip()]
-        if not urls:
-            QMessageBox.warning(self, self._t("no_urls_title"), self._t("no_urls_body"))
+    # ----------------- dialogs hooks -----------------
+
+    def open_add_song_dialog(self):
+        dlg = AddSongDialog(self, t=self._tf)
+        dlg.setStyleSheet(self.styleSheet())
+        if dlg.exec() != QDialog.Accepted:
             return
+
+        url = dlg.url()
+        if not url:
+            return
+
+        fmt = self.format_box.currentText()
+        self.add_queue_row(url=url, fmt=fmt, status_key="queued", pct=0)
+
+    def open_add_playlist_dialog(self):
+        dlg = AddPlaylistDialog(self, t=self._tf)
+        dlg.setStyleSheet(self.styleSheet())
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        data = dlg.data()
+        url = data.get("url", "").strip()
+        if not url:
+            return
+
+        fmt = self.format_box.currentText()
+
+        if not data.get("expand", True):
+            # Simple mode: add as a single item (later you can expand in worker)
+            self.add_queue_row(url=url, fmt=fmt, status_key="queued", pct=0)
+            return
+
+        # Expand now (recommended)
+        self.add_log(self._t("expanding_playlist"))
+        try:
+            urls = self.expand_playlist_to_urls(url, limit=data.get("limit", 200))
+        except Exception as e:
+            QMessageBox.warning(self, self._t("error"), str(e))
+            return
+
+        if not urls:
+            QMessageBox.warning(self, self._t("error"), self._t("playlist_no_items"))
+            return
+
+        for u in urls:
+            self.add_queue_row(url=u, fmt=fmt, status_key="queued", pct=0)
+
+        self.add_log(self._tf("playlist_items_added", count=len(urls)))
+
+    def open_paste_batch_dialog(self):
+        dlg = PasteBatchDialog(self, t=self._tf)
+        dlg.setStyleSheet(self.styleSheet())
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        urls = dlg.urls()
+        if not urls:
+            return
+
+        fmt = self.format_box.currentText()
+        for u in urls:
+            self.add_queue_row(url=u, fmt=fmt, status_key="queued", pct=0)
+
+    # ----------------- playlist expansion -----------------
+
+    def expand_playlist_to_urls(self, playlist_url: str, limit: int = 200) -> list[str]:
+        """
+        Expand a playlist URL into a list of watch URLs.
+        Uses downloader.get_info() (yt-dlp metadata) and extracts entries.
+        """
+        info = self.downloader.get_info(playlist_url)
+
+        entries = info.get("entries") if isinstance(info, dict) else None
+        if not entries:
+            # Some extractors return _type == 'playlist' without entries if flat extraction disabled
+            # We'll just return empty so UI can show message.
+            return []
+
+        out = []
+        for entry in entries:
+            if not entry:
+                continue
+            webpage = entry.get("webpage_url") if isinstance(entry, dict) else None
+            if webpage:
+                out.append(webpage)
+                continue
+            # fallback: id -> watch URL
+            eid = entry.get("id") if isinstance(entry, dict) else None
+            if eid:
+                out.append(f"https://www.youtube.com/watch?v={eid}")
+
+            if len(out) >= int(limit):
+                break
+
+        # Deduplicate preserving order
+        seen = set()
+        deduped = []
+        for u in out:
+            if u not in seen:
+                seen.add(u)
+                deduped.append(u)
+        return deduped
+
+    # ----------------- download -----------------
+
+    def start_download(self):
+        queued = self.get_queued_rows()
+        if not queued:
+            QMessageBox.warning(self, self._t("no_urls_title"), self._t("no_queued_body"))
+            return
+
+        urls = [u for (_r, u, _f) in queued]
+        # Si quieres soportar fmt por fila, cámbialo en el worker (por ahora usa global)
         fmt = self.format_box.currentText()
         q = self.quality_box.currentText()
-
-        self.build_queue(urls, fmt)
 
         self.download_btn.setEnabled(False)
         self.download_btn.setText(self._t("downloading"))
