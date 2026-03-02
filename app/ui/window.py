@@ -353,11 +353,7 @@ class MainWindow(QMainWindow):
         right_lay.setSpacing(6)
 
         queue_bar = QHBoxLayout()
-        self.queue_label = QLabel()
-        self.queue_label.setObjectName("SectionLabel")
-        self._bind_text(self.queue_label, "queue")
-        queue_bar.addWidget(self.queue_label)
-        queue_bar.addStretch(2)
+        queue_bar.addStretch(5)
 
         self.expand_queue_btn = QPushButton(self._t("expand_table"))
         self.expand_queue_btn.setObjectName("SecondaryButton")
@@ -367,7 +363,7 @@ class MainWindow(QMainWindow):
         right_lay.addLayout(queue_bar)
 
         # Queue Table
-        self.queue_table = QTableWidget(0, 6)
+        self.queue_table = QTableWidget(0, 7)
         self.queue_table.setObjectName("QueueTable")
         self.queue_table.setHorizontalHeaderLabels([
             self._t("col_title"),
@@ -376,7 +372,11 @@ class MainWindow(QMainWindow):
             self._t("col_status"),
             self._t("col_progress"),
             self._t("col_output"),
+            ""  # actions column (sin texto)
+
         ])
+        self.queue_table.verticalHeader().setDefaultSectionSize(90)
+
         hdr = self.queue_table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.Stretch)           # title
         hdr.setSectionResizeMode(1, QHeaderView.Stretch)           # url
@@ -384,7 +384,9 @@ class MainWindow(QMainWindow):
         hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # status
         hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # progress
         hdr.setSectionResizeMode(5, QHeaderView.Stretch)           # output
-
+# Columna actions: fija y chiquita
+hdr.setSectionResizeMode(6, QHeaderView.Fixed)
+self.queue_table.setColumnWidth(6, 36)
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.queue_table.setAlternatingRowColors(True)

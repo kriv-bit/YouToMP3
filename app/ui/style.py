@@ -234,7 +234,7 @@ def main_qss() -> str:
             border: none;
             border-bottom: 2px solid #1B2A3D;
             font-weight: 800;
-            font-size: 11px;
+            font-size: 15px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -379,5 +379,14 @@ def main_qss() -> str:
             font-weight: 800;
             color: #8899AA;
             letter-spacing: 0.5px;
+        }
+
+        QSplitter::handle {
+            background: #1B2A3D;
+            width: 10px;
+        }
+
+        QSplitter::handle:hover {
+            background: #2B3E56;
         }
     """

@@ -217,8 +217,11 @@ class QueueManager:
             self._t("col_status"),
             self._t("col_progress"),
             self._t("col_output"),
+            ""  # actions column (sin texto)
+
         ])
         t.verticalHeader().setVisible(False)
+        t.verticalHeader().setDefaultSectionSize(70)
         t.setEditTriggers(QAbstractItemView.NoEditTriggers)
         t.setSelectionBehavior(QAbstractItemView.SelectRows)
         t.setAlternatingRowColors(True)
@@ -243,6 +246,9 @@ class QueueManager:
         hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         hdr.setSectionResizeMode(5, QHeaderView.Stretch)
+        # Columna actions: fija y chiquita
+        hdr.setSectionResizeMode(6, QHeaderView.Fixed)
+        t.setColumnWidth(6, 36)
 
         lay.addWidget(t)
         dlg.exec()
