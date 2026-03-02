@@ -12,16 +12,22 @@ class AddSongDialog(QDialog):
 
     def __init__(self, parent=None, t=lambda k, **kw: k):
         super().__init__(parent)
+        self.setObjectName("AppDialog")
         self.t = t
         self.setWindowTitle(self.t("add_song"))
-        self.resize(560, 170)
+        self.resize(560, 190)
 
         lay = QVBoxLayout(self)
+        lay.setSpacing(14)
+        lay.setContentsMargins(24, 20, 24, 20)
 
-        lay.addWidget(QLabel(self.t("song_url")))
+        lbl = QLabel(self.t("song_url"))
+        lay.addWidget(lbl)
         self.url_edit = QLineEdit()
         self.url_edit.setPlaceholderText(self.t("enter_url"))
         lay.addWidget(self.url_edit)
+
+        lay.addSpacing(6)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
@@ -44,16 +50,22 @@ class AddPlaylistDialog(QDialog):
 
     def __init__(self, parent=None, t=lambda k, **kw: k):
         super().__init__(parent)
+        self.setObjectName("AppDialog")
         self.t = t
         self.setWindowTitle(self.t("add_playlist"))
-        self.resize(620, 240)
+        self.resize(620, 280)
 
         lay = QVBoxLayout(self)
+        lay.setSpacing(12)
+        lay.setContentsMargins(24, 20, 24, 20)
 
-        lay.addWidget(QLabel(self.t("playlist_url")))
+        lbl = QLabel(self.t("playlist_url"))
+        lay.addWidget(lbl)
         self.url_edit = QLineEdit()
         self.url_edit.setPlaceholderText(self.t("enter_playlist_url"))
         lay.addWidget(self.url_edit)
+
+        lay.addSpacing(4)
 
         self.chk_expand = QCheckBox(self.t("expand_now"))
         self.chk_expand.setChecked(True)
@@ -67,6 +79,8 @@ class AddPlaylistDialog(QDialog):
         limit_row.addWidget(self.spin_limit)
         limit_row.addStretch(1)
         lay.addLayout(limit_row)
+
+        lay.addSpacing(6)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
@@ -93,11 +107,14 @@ class PasteBatchDialog(QDialog):
 
     def __init__(self, parent=None, t=lambda k, **kw: k):
         super().__init__(parent)
+        self.setObjectName("AppDialog")
         self.t = t
         self.setWindowTitle(self.t("paste_batch"))
-        self.resize(780, 420)
+        self.resize(780, 440)
 
         lay = QVBoxLayout(self)
+        lay.setSpacing(14)
+        lay.setContentsMargins(24, 20, 24, 20)
 
         self.text = QTextEdit()
         self.text.setObjectName("TextArea")

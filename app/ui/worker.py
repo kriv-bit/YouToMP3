@@ -74,10 +74,26 @@ class DownloadWorker(QObject):
                 info = self.downloader.get_info(url)
                 title = info.get("title") or url
                 uploader = info.get("uploader") or info.get("channel") or ""
+                duration = info.get("duration")  # seconds (int) or None
+                thumbnail = info.get("thumbnail") or ""
                 nice = f"{title}" + (f" — {uploader}" if uploader else "")
 
                 self._current_title = nice
                 self.log_event.emit({"key": "now_downloading", "args": {"title": nice}})
+
+                # Emit metadata for the Now Downloading card
+                self.log_event.emit({
+                    "key": "current_item_meta",
+                    "args": {
+                        "title": title,
+                        "uploader": uploader,
+                        "duration": duration,
+                        "thumbnail": thumbnail,
+                        "url": url,
+                        "index": i,
+                        "total": total_items,
+                    }
+                })
 
                 # update title en tabla (sin esperar progreso)
                 self.item_update.emit(row, "downloading", 0, nice, "")

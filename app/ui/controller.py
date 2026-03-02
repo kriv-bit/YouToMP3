@@ -221,9 +221,23 @@ class MainController:
         self.win.thread.start()
 
     def on_log_event(self, event: object):
-        """Route a Worker log_event signal to the console and now_label."""
+        """Route a Worker log_event signal to the console, now_label, and card."""
         key = event.get("key", "ready")
         args = event.get("args", {})
+
+        # Intercept metadata for the Now Downloading card
+        if key == "current_item_meta":
+            self.win.now_card.update_meta(
+                title=args.get("title", ""),
+                uploader=args.get("uploader", ""),
+                duration=args.get("duration"),
+                thumbnail=args.get("thumbnail", ""),
+                url=args.get("url", ""),
+                index=args.get("index", 0),
+                total=args.get("total", 0),
+            )
+            return  # Don't log raw metadata to console
+
         self.win.add_log(self._tf(key, **args))
         if key == "now_downloading":
             self.win.now_label.setText(self._tf(key, **args))
@@ -240,3 +254,4 @@ class MainController:
         self.win.download_btn.setEnabled(True)
         self.win.download_btn.setText(self._t("download"))
         self.set_status("idle")
+        self.win.now_card.clear()

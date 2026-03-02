@@ -8,9 +8,20 @@ from typing import Callable
 
 from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QDialog, QVBoxLayout,
+    QDialog, QVBoxLayout, QToolButton, QMessageBox
 )
-from PySide6.QtGui import Qt
+from PySide6.QtGui import Qt, QColor
+from PySide6.QtCore import QPoint
+
+
+# Status → (foreground, background)
+STATUS_COLORS = {
+    "queued":      (QColor("#8899AA"), QColor("#131D2A")),
+    "downloading": (QColor("#F59E0B"), QColor("#1E1A0D")),
+    "done":        (QColor("#34D399"), QColor("#0D1E16")),
+    "error":       (QColor("#F87171"), QColor("#1E0D0D")),
+    "cancelled":   (QColor("#6B7280"), QColor("#151515")),
+}
 
 
 class QueueManager:
@@ -25,11 +36,23 @@ class QueueManager:
         self._table = table
         self._t = t_fn
 
+        # Optional hooks (set from outside)
+        self._can_modify_fn: Callable[[], bool] | None = None
+        self._settings_set_fn: Callable | None = None
+
     # ---- public: update translation callable when language changes ----
 
     def set_t(self, t_fn: Callable[[str], str]):
         """Replace the translation function (called on language switch)."""
         self._t = t_fn
+
+    def set_can_modify_fn(self, fn: Callable[[], bool] | None):
+        """Set a function that returns False when the queue must not be edited (e.g., while downloading)."""
+        self._can_modify_fn = fn
+
+    def set_settings_set_fn(self, fn: Callable | None):
+        """Optionally store settings_set_fn so delete/clear can auto-save without receiving it as param."""
+        self._settings_set_fn = fn
 
     def refresh_headers(self):
         """Re-apply translated column headers."""
@@ -40,6 +63,7 @@ class QueueManager:
             self._t("col_status"),
             self._t("col_progress"),
             self._t("col_output"),
+            "",  # actions column
         ])
 
     # ---- row operations ----
@@ -57,6 +81,9 @@ class QueueManager:
         settings_set_fn: Callable | None = None,
     ):
         """Insert a new row at the bottom of the queue."""
+        if settings_set_fn:
+            self._settings_set_fn = settings_set_fn
+
         row = self._table.rowCount()
         self._table.insertRow(row)
 
@@ -65,19 +92,31 @@ class QueueManager:
         self._table.setItem(row, 2, QTableWidgetItem(fmt))       # Format
         self._table.setItem(row, 5, QTableWidgetItem(out_file))  # Output
 
+        # Tooltips for long text columns
+        self._table.item(row, 0).setToolTip(title)
+        self._table.item(row, 1).setToolTip(url)
+        self._table.item(row, 5).setToolTip(out_file)
+
         self._set_status_cell(row, status_key)
         self._set_progress_cell(row, pct)
 
-        if auto_save and settings_set_fn:
-            self.save(settings_set_fn)
+        # Add per-row delete button in actions column
+        self._add_delete_button(row)
+
+        if auto_save and self._settings_set_fn:
+            self.save(self._settings_set_fn)
 
     def build(self, urls: list[str], fmt: str, settings_set_fn: Callable | None = None):
         """(legacy) Reset table and rebuild from a list of URLs."""
+        if settings_set_fn:
+            self._settings_set_fn = settings_set_fn
+
         self._table.setRowCount(0)
         for url in urls:
             self.add_row(url=url, fmt=fmt, status_key="queued", pct=0, auto_save=False)
-        if settings_set_fn:
-            self.save(settings_set_fn)
+        if self._settings_set_fn:
+            self.save(self._settings_set_fn)
+
 
     def get_queued_rows(self, fallback_fmt: str = "mp3") -> list[tuple[int, str, str]]:
         """Return ``[(row_index, url, format)]`` for items with status ``'queued'``."""
@@ -103,22 +142,32 @@ class QueueManager:
         settings_set_fn: Callable | None = None,
     ):
         """Update a single row from a Worker signal."""
+        if settings_set_fn:
+            self._settings_set_fn = settings_set_fn
+
         if title and self._table.item(row, 0):
             self._table.item(row, 0).setText(title)
+            self._table.item(row, 0).setToolTip(title)
 
         self._set_status_cell(row, status_key)
         self._set_progress_cell(row, pct)
 
         if out_file and self._table.item(row, 5):
             self._table.item(row, 5).setText(out_file)
+            self._table.item(row, 5).setToolTip(out_file)
 
-        if settings_set_fn and (status_key in ("done", "error", "cancelled") or pct in (0, 100)):
-            self.save(settings_set_fn)
+        # ensure delete button exists (in case older saved rows)
+        self._add_delete_button(row)
+
+        if self._settings_set_fn and (status_key in ("done", "error", "cancelled") or pct in (0, 100)):
+            self.save(self._settings_set_fn)
 
     # ---- persistence ----
 
     def save(self, settings_set_fn: Callable):
         """Serialize queue rows to JSON and persist via *settings_set_fn*."""
+        self._settings_set_fn = settings_set_fn
+
         rows = []
         for r in range(self._table.rowCount()):
             title = self._table.item(r, 0).text() if self._table.item(r, 0) else ""
@@ -159,25 +208,43 @@ class QueueManager:
             row = self._table.rowCount()
             self._table.insertRow(row)
 
-            self._table.setItem(row, 0, QTableWidgetItem(x.get("title", "")))
-            self._table.setItem(row, 1, QTableWidgetItem(x.get("url", "")))
+            title = x.get("title", "")
+            url = x.get("url", "")
+            outp = x.get("output", "")
+
+            item_title = QTableWidgetItem(title)
+            item_title.setToolTip(title)
+            self._table.setItem(row, 0, item_title)
+
+            item_url = QTableWidgetItem(url)
+            item_url.setToolTip(url)
+            self._table.setItem(row, 1, item_url)
+
             self._table.setItem(row, 2, QTableWidgetItem(x.get("format", "")))
-            self._table.setItem(row, 5, QTableWidgetItem(x.get("output", "")))
+
+            item_out = QTableWidgetItem(outp)
+            item_out.setToolTip(outp)
+            self._table.setItem(row, 5, item_out)
 
             self._set_status_cell(row, x.get("status", "queued"))
             self._set_progress_cell(row, x.get("progress", 0))
+
+            # Add delete button for each restored row
+            self._add_delete_button(row)
 
     # ---- modal ----
 
     def open_modal(self, parent):
         """Open a read-only expanded view of the queue in a modal dialog."""
         dlg = QDialog(parent)
+        dlg.setObjectName("AppDialog")
         dlg.setWindowTitle(self._t("downloads_queue"))
         dlg.resize(1100, 650)
 
         lay = QVBoxLayout(dlg)
 
         t = QTableWidget(self._table.rowCount(), self._table.columnCount())
+        t.setObjectName("QueueTable")
         t.setHorizontalHeaderLabels([
             self._t("col_title"),
             self._t("col_url"),
@@ -185,20 +252,27 @@ class QueueManager:
             self._t("col_status"),
             self._t("col_progress"),
             self._t("col_output"),
+            "",
         ])
         t.verticalHeader().setVisible(False)
+        t.verticalHeader().setDefaultSectionSize(70)
         t.setEditTriggers(QAbstractItemView.NoEditTriggers)
         t.setSelectionBehavior(QAbstractItemView.SelectRows)
         t.setAlternatingRowColors(True)
 
-        # Copy content (including UserRole data)
+        # Copy content (including UserRole data and colors) — skip action widgets
         for r in range(self._table.rowCount()):
             for c in range(self._table.columnCount()):
+                if c == 6:
+                    continue  # no actions in modal
                 src = self._table.item(r, c)
                 if not src:
                     continue
                 dst = QTableWidgetItem(src.text())
                 dst.setData(Qt.UserRole, src.data(Qt.UserRole))
+                dst.setForeground(src.foreground())
+                dst.setBackground(src.background())
+                dst.setToolTip(src.toolTip())
                 t.setItem(r, c, dst)
 
         hdr = t.horizontalHeader()
@@ -208,11 +282,44 @@ class QueueManager:
         hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         hdr.setSectionResizeMode(5, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(6, QHeaderView.Fixed)
+        t.setColumnWidth(6, 36)
 
         lay.addWidget(t)
         dlg.exec()
 
     # ---- internal helpers ----
+
+    def _add_delete_button(self, row: int):
+        """Ensure the delete button exists in the actions column for a row."""
+        # If a widget already exists, keep it
+        if self._table.cellWidget(row, 6) is not None:
+            return
+
+        btn = QToolButton(self._table)
+        btn.setText("✕")
+        btn.setObjectName("RowDeleteButton")
+        btn.setToolTip(self._t("delete_row"))
+
+        # Robust row lookup at click time (indexes can change after deletions)
+        btn.clicked.connect(lambda: self._delete_row_from_button(btn))
+        self._table.setCellWidget(row, 6, btn)
+
+    def _delete_row_from_button(self, btn: QToolButton):
+        if self._can_modify_fn and not self._can_modify_fn():
+            QMessageBox.warning(None, self._t("error"), self._t("cannot_edit_while_downloading"))
+            return
+
+        p = btn.mapTo(self._table.viewport(), QPoint(0, 0))
+        idx = self._table.indexAt(p)
+        if not idx.isValid():
+            return
+
+        row = idx.row()
+        self._table.removeRow(row)
+
+        if self._settings_set_fn:
+            self.save(self._settings_set_fn)
 
     def _set_status_cell(self, row: int, status_key: str):
         item = self._table.item(row, 3)
@@ -230,6 +337,15 @@ class QueueManager:
         }
         item.setText(status_map.get(status_key, status_key))
 
+        fg, bg = STATUS_COLORS.get(status_key, STATUS_COLORS["queued"])
+        item.setForeground(fg)
+        item.setBackground(bg)
+
+        prog_item = self._table.item(row, 4)
+        if prog_item:
+            prog_item.setForeground(fg)
+            prog_item.setBackground(bg)
+
     def _set_progress_cell(self, row: int, pct: int):
         pct = max(0, min(100, int(pct)))
         item = self._table.item(row, 4)
@@ -238,3 +354,36 @@ class QueueManager:
             self._table.setItem(row, 4, item)
         item.setData(Qt.UserRole, pct)
         item.setText(f"{pct}%")
+
+        status_item = self._table.item(row, 3)
+        if status_item:
+            sk = status_item.data(Qt.UserRole) or "queued"
+            fg, bg = STATUS_COLORS.get(sk, STATUS_COLORS["queued"])
+            item.setForeground(fg)
+            item.setBackground(bg)
+
+    def clear(self, *, settings_set_fn: Callable | None = None, parent=None, confirm: bool = True):
+        """Clear all rows from the queue table."""
+        if self._table.rowCount() == 0:
+            return
+
+        # Don't allow edits while downloading (same logic you usas en UI)
+        if parent is not None and getattr(parent, "status_key", "idle") == "downloading":
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(parent, self._t("error"), self._t("cannot_edit_while_downloading"))
+            return
+
+        if confirm and parent is not None:
+            from PySide6.QtWidgets import QMessageBox
+            res = QMessageBox.question(
+                parent,
+                self._t("confirm"),
+                self._t("clear_queue_confirm"),
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if res != QMessageBox.Yes:
+                return
+
+        self._table.setRowCount(0)
+        if settings_set_fn:
+            self.save(settings_set_fn)
