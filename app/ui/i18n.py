@@ -69,6 +69,12 @@ TRANSLATIONS = {
         "nd_no_item": "No item downloading",
         "nd_playlist_of": "Playlist: {index} / {total}",
         "nd_unknown": "Unknown",
+
+        "delete_row": "Delete item",
+"clear_queue": "Clear queue",
+"confirm": "Confirm",
+"clear_queue_confirm": "Delete ALL items from the queue? This cannot be undone.",
+"cannot_edit_while_downloading": "You can’t modify the queue while downloading.",
     },
     "es": {
         "now_downloading": "Descargando ahora: {title}",
@@ -137,5 +143,10 @@ TRANSLATIONS = {
         "nd_no_item": "Sin elemento en descarga",
         "nd_playlist_of": "Playlist: {index} / {total}",
         "nd_unknown": "Desconocido",
+        "delete_row": "Eliminar elemento",
+        "clear_queue": "Vaciar cola",
+        "confirm": "Confirmar",
+        "clear_queue_confirm": "¿Eliminar TODOS los elementos de la cola? Esta acción no se puede deshacer.",
+        "cannot_edit_while_downloading": "No puedes modificar la cola mientras se está descargando.",
     },
 }

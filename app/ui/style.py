@@ -389,4 +389,19 @@ def main_qss() -> str:
         QSplitter::handle:hover {
             background: #2B3E56;
         }
+
+        QToolButton#RowDeleteButton {
+            background: transparent;
+            border: none;
+            font-size: 14px;
+            font-weight: 900;
+            color: rgba(255,255,255,0.45);
+            padding: 0px;
+        }
+        QToolButton#RowDeleteButton:hover {
+            color: #FB7185;
+        }
+        QToolButton#RowDeleteButton:pressed {
+            color: #F43F5E;
+        }
     """

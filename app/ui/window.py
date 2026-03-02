@@ -6,7 +6,7 @@ import os
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
     QLabel, QComboBox, QProgressBar, QFrame,
-    QTableWidget, QHeaderView, QAbstractItemView, QSplitter, QToolButton
+    QTableWidget, QHeaderView, QAbstractItemView, QSplitter
 )
 from PySide6.QtGui import QFont, QIcon, Qt
 
@@ -21,17 +21,7 @@ from app.ui.now_downloading import NowDownloadingCard
 
 
 class MainWindow(QMainWindow):
-    """Top-level application window.
-
-    Layout (content area):
-    - Top bar: H1/H2 + language toggle
-    - Progress bar + Download button
-    - Two-column body:
-      - Left: action buttons + Now Downloading card + console
-      - Right: queue table (priority space)
-    """
-
-    # ---- lifecycle ----
+    """Top-level application window."""
 
     def __init__(self):
         super().__init__()
@@ -57,13 +47,15 @@ class MainWindow(QMainWindow):
 
         self._i18n_bindings = []  # list of (widget, key, attr)
 
+        # Build widgets first
         self.build_ui()
         self.apply_style()
 
-        # Controller & queue manager (created after build_ui so widgets exist)
+        # Create queue manager + controller AFTER widgets exist
         self.queue = QueueManager(self.queue_table, t_fn=self._t)
         self.ctrl = MainController(self)
 
+        # Now that queue exists, you can safely apply language
         self.apply_language(self.lang)
         self.settings.restore_geometry(self)
         self.queue.load(self._settings_get)
@@ -71,7 +63,8 @@ class MainWindow(QMainWindow):
         self.add_log(self._t("ready"))
 
     def closeEvent(self, event):
-        self.queue.save(self._settings_set)
+        if hasattr(self, "queue"):
+            self.queue.save(self._settings_set)
         self.settings.save_geometry(self)
         super().closeEvent(event)
 
@@ -104,21 +97,29 @@ class MainWindow(QMainWindow):
             if attr == "text":
                 w.setText(self._t(key))
 
-        # Update queue manager translation
-        self.queue.set_t(self._t)
-        self.queue.refresh_headers()
-
-        # Update now downloading card translation
-        self.now_card.set_t(self._t)
-
-        # Update dynamic fields
-        self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
+        # These widgets always exist after build_ui
         self.lang_label.setText(self._t("language"))
+        self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
 
+        # Update button text state
         if self.download_btn.isEnabled():
             self.download_btn.setText(self._t("download"))
         else:
             self.download_btn.setText(self._t("downloading"))
+
+        # Queue/now card may not exist during early init signals (guard)
+        if hasattr(self, "queue"):
+            self.queue.set_t(self._t)
+            self.queue.refresh_headers()
+
+        if hasattr(self, "now_card"):
+            self.now_card.set_t(self._t)
+
+        # Also refresh the expand/clear button text (they are bound but safe)
+        if hasattr(self, "expand_queue_btn"):
+            self.expand_queue_btn.setText(self._t("expand_table"))
+        if hasattr(self, "clear_queue_btn"):
+            self.clear_queue_btn.setText(self._t("clear_queue"))
 
     # ---- settings convenience ----
 
@@ -151,9 +152,11 @@ class MainWindow(QMainWindow):
         add_shadow(self.content, color_hex="#A855F7", blur=28, x=0, y=10, alpha=25)
         add_shadow(self.download_btn, color_hex="#FB7185", blur=30, x=0, y=10, alpha=45)
 
-        # Load lang selection into combo
+        # Load lang selection into combo WITHOUT crashing
         idx = 0 if self.lang == "en" else 1
+        self.lang_combo.blockSignals(True)   # 🔥 prevents early currentIndexChanged
         self.lang_combo.setCurrentIndex(idx)
+        self.lang_combo.blockSignals(False)
 
     # ---- sidebar ----
 
@@ -210,6 +213,7 @@ class MainWindow(QMainWindow):
         self.folder_btn = QPushButton()
         self._bind_text(self.folder_btn, "select_folder")
         self.folder_btn.setObjectName("SecondaryButton")
+        # ctrl exists after __init__, but button clicks happen after init → ok
         self.folder_btn.clicked.connect(lambda: self.ctrl.select_folder())
         s.addWidget(self.folder_btn)
 
@@ -241,7 +245,7 @@ class MainWindow(QMainWindow):
         c.setSpacing(12)
         c.setContentsMargins(18, 16, 18, 16)
 
-        # ── Top bar (title + language toggle) ──
+        # ── Top bar ──
         top = QHBoxLayout()
         left = QVBoxLayout()
         left.setSpacing(2)
@@ -299,13 +303,12 @@ class MainWindow(QMainWindow):
         body_splitter = QSplitter(Qt.Horizontal)
         body_splitter.setChildrenCollapsible(False)
 
-        # ── LEFT COLUMN: action buttons + card + console ──
+        # ── LEFT ──
         left_panel = QFrame()
         left_lay = QVBoxLayout(left_panel)
         left_lay.setContentsMargins(0, 0, 0, 0)
         left_lay.setSpacing(10)
 
-        # Action buttons
         action_row = QHBoxLayout()
         action_row.setSpacing(8)
 
@@ -329,11 +332,9 @@ class MainWindow(QMainWindow):
         action_row.addWidget(self.btn_paste_batch)
         left_lay.addLayout(action_row)
 
-        # Now Downloading card
         self.now_card = NowDownloadingCard(t_fn=self._t, parent=self)
         left_lay.addWidget(self.now_card)
 
-        # Console log
         console_label = QLabel()
         console_label.setObjectName("SectionLabel")
         self._bind_text(console_label, "console")
@@ -346,7 +347,7 @@ class MainWindow(QMainWindow):
 
         body_splitter.addWidget(left_panel)
 
-        # ── RIGHT COLUMN: queue table ──
+        # ── RIGHT: queue ──
         right_panel = QFrame()
         right_lay = QVBoxLayout(right_panel)
         right_lay.setContentsMargins(0, 0, 0, 0)
@@ -355,14 +356,21 @@ class MainWindow(QMainWindow):
         queue_bar = QHBoxLayout()
         queue_bar.addStretch(5)
 
-        self.expand_queue_btn = QPushButton(self._t("expand_table"))
+        self.clear_queue_btn = QPushButton()
+        self._bind_text(self.clear_queue_btn, "clear_queue")
+        self.clear_queue_btn.setObjectName("SecondaryButton")
+        # ✅ connect safely — queue exists after __init__, but click happens after init
+        self.clear_queue_btn.clicked.connect(self._on_clear_queue_clicked)
+        queue_bar.addWidget(self.clear_queue_btn)
+
+        self.expand_queue_btn = QPushButton()
+        self._bind_text(self.expand_queue_btn, "expand_table")
         self.expand_queue_btn.setObjectName("SecondaryButton")
         self.expand_queue_btn.clicked.connect(lambda: self.queue.open_modal(self))
         queue_bar.addWidget(self.expand_queue_btn)
 
         right_lay.addLayout(queue_bar)
 
-        # Queue Table
         self.queue_table = QTableWidget(0, 7)
         self.queue_table.setObjectName("QueueTable")
         self.queue_table.setHorizontalHeaderLabels([
@@ -372,21 +380,20 @@ class MainWindow(QMainWindow):
             self._t("col_status"),
             self._t("col_progress"),
             self._t("col_output"),
-            ""  # actions column (sin texto)
-
+            "",
         ])
         self.queue_table.verticalHeader().setDefaultSectionSize(90)
 
         hdr = self.queue_table.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.Stretch)           # title
-        hdr.setSectionResizeMode(1, QHeaderView.Stretch)           # url
-        hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # format
-        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # status
-        hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # progress
-        hdr.setSectionResizeMode(5, QHeaderView.Stretch)           # output
-# Columna actions: fija y chiquita
+        hdr.setSectionResizeMode(0, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(5, QHeaderView.Stretch)
         hdr.setSectionResizeMode(6, QHeaderView.Fixed)
         self.queue_table.setColumnWidth(6, 36)
+
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.queue_table.setAlternatingRowColors(True)
@@ -394,41 +401,25 @@ class MainWindow(QMainWindow):
         self.queue_table.setShowGrid(False)
 
         right_lay.addWidget(self.queue_table, 1)
-
         body_splitter.addWidget(right_panel)
 
-        # Give right column (table) more space: ~40% left, ~60% right
         body_splitter.setSizes([380, 560])
         body_splitter.setStretchFactor(0, 2)
         body_splitter.setStretchFactor(1, 3)
 
         c.addWidget(body_splitter, 1)
 
+    # ---- actions ----
+
+    def _on_clear_queue_clicked(self):
+        # queue exists after init, but guard just in case
+        if not hasattr(self, "queue"):
+            return
+        # call QueueManager.clear (we'll add it below)
+        self.queue.clear(settings_set_fn=self._settings_set, parent=self, confirm=True)
+
     # ---- style ----
-    def _add_delete_button(self, row: int):
-        btn = QToolButton(self.queue_table)
-        btn.setText("✕")  # 
-        btn.setObjectName("RowDeleteButton")
-        btn.setToolTip(self._t("delete_row"))
 
-        btn.clicked.connect(lambda: self._delete_row_from_button(btn))
-
-        self.queue_table.setCellWidget(row, 6, btn)
-
-    def _delete_row_from_button(self, btn: QToolButton):
- 
-        if getattr(self, "status_key", "idle") == "downloading":
-            QMessageBox.warning(self, self._t("error"), self._t("cannot_edit_while_downloading"))
-            return
-
-        p = btn.mapTo(self.queue_table.viewport(), QPoint(0, 0))
-        idx = self.queue_table.indexAt(p)
-        if not idx.isValid():
-            return
-
-        row = idx.row()
-        self.queue_table.removeRow(row)
-        self.save_queue()
     def apply_style(self):
         self.setStyleSheet(main_qss())
 
@@ -439,6 +430,13 @@ class MainWindow(QMainWindow):
         set_elided(self.folder_chip, self.output_folder)
 
     def _on_lang_change(self):
+        # prevent early crash if triggered during init for any reason
+        if not hasattr(self, "queue"):
+            # still update language variables + basic bound texts safely
+            lang = self.lang_combo.currentData()
+            self.lang = "es" if lang == "es" else "en"
+            return
+
         lang = self.lang_combo.currentData()
         self.apply_language(lang)
 
