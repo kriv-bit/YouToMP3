@@ -254,7 +254,7 @@ class QueueManager:
         dlg.exec()
 
     # ---- internal helpers ----
-
+    
     def _set_status_cell(self, row: int, status_key: str):
         item = self._table.item(row, 3)
         if not item:

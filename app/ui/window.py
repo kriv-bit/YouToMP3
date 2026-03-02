@@ -6,7 +6,7 @@ import os
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
     QLabel, QComboBox, QProgressBar, QFrame,
-    QTableWidget, QHeaderView, QAbstractItemView, QSplitter,
+    QTableWidget, QHeaderView, QAbstractItemView, QSplitter, QToolButton
 )
 from PySide6.QtGui import QFont, QIcon, Qt
 
@@ -385,8 +385,8 @@ class MainWindow(QMainWindow):
         hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # progress
         hdr.setSectionResizeMode(5, QHeaderView.Stretch)           # output
 # Columna actions: fija y chiquita
-hdr.setSectionResizeMode(6, QHeaderView.Fixed)
-self.queue_table.setColumnWidth(6, 36)
+        hdr.setSectionResizeMode(6, QHeaderView.Fixed)
+        self.queue_table.setColumnWidth(6, 36)
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.queue_table.setAlternatingRowColors(True)
@@ -405,7 +405,30 @@ self.queue_table.setColumnWidth(6, 36)
         c.addWidget(body_splitter, 1)
 
     # ---- style ----
+    def _add_delete_button(self, row: int):
+        btn = QToolButton(self.queue_table)
+        btn.setText("✕")  # 
+        btn.setObjectName("RowDeleteButton")
+        btn.setToolTip(self._t("delete_row"))
 
+        btn.clicked.connect(lambda: self._delete_row_from_button(btn))
+
+        self.queue_table.setCellWidget(row, 6, btn)
+
+    def _delete_row_from_button(self, btn: QToolButton):
+ 
+        if getattr(self, "status_key", "idle") == "downloading":
+            QMessageBox.warning(self, self._t("error"), self._t("cannot_edit_while_downloading"))
+            return
+
+        p = btn.mapTo(self.queue_table.viewport(), QPoint(0, 0))
+        idx = self.queue_table.indexAt(p)
+        if not idx.isValid():
+            return
+
+        row = idx.row()
+        self.queue_table.removeRow(row)
+        self.save_queue()
     def apply_style(self):
         self.setStyleSheet(main_qss())
 
