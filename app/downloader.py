@@ -99,8 +99,8 @@ class MediaDownloader:
                 "postprocessors": [
                     {"key": "FFmpegExtractAudio", "preferredcodec": "m4a", "preferredquality": str(quality)},
                     {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
-                    {"key": "EmbedThumbnail"},
                     {"key": "FFmpegMetadata"},
+                    {"key": "EmbedThumbnail"}
                 ],
             }
             self._try_download_with_fallback(url, opts)
