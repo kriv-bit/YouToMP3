@@ -56,7 +56,7 @@ class MainController:
         if folder and os.path.isdir(folder):
             QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
         else:
-            QMessageBox.warning(self.win, self._t("error"), self._t("folder_not_found"))
+            QMessageBox.warning(self.win, self._t("error_title"), self._t("folder_not_found"))
 
     # ---- status ----
 
@@ -65,10 +65,13 @@ class MainController:
         self.win.status_key = key
         if key == "downloading":
             self.win.status_value.setText(self._t("downloading"))
-            self.win.status_value.setStyleSheet("color:#00D4FF; font-weight:900; font-size:13px;")
+            self.win.status_value.setProperty("state", "downloading")
         else:
             self.win.status_value.setText(self._t("idle"))
-            self.win.status_value.setStyleSheet("color:#34D399; font-weight:900; font-size:13px;")
+            self.win.status_value.setProperty("state", "idle")
+        self.win.status_value.style().unpolish(self.win.status_value)
+        self.win.status_value.style().polish(self.win.status_value)
+        self.win.status_value.update()
 
     # ---- dialog actions ----
 
@@ -115,11 +118,11 @@ class MainController:
         try:
             urls = self.expand_playlist_to_urls(url, limit=data.get("limit", 200))
         except Exception as e:
-            QMessageBox.warning(self.win, self._t("error"), str(e))
+            QMessageBox.warning(self.win, self._t("error_title"), str(e))
             return
 
         if not urls:
-            QMessageBox.warning(self.win, self._t("error"), self._t("playlist_no_items"))
+            QMessageBox.warning(self.win, self._t("error_title"), self._t("playlist_no_items"))
             return
 
         for u in urls:

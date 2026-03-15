@@ -16,11 +16,11 @@ from PySide6.QtCore import QPoint
 
 # Status → (foreground, background)
 STATUS_COLORS = {
-    "queued":      (QColor("#8899AA"), QColor("#131D2A")),
-    "downloading": (QColor("#F59E0B"), QColor("#1E1A0D")),
-    "done":        (QColor("#34D399"), QColor("#0D1E16")),
-    "error":       (QColor("#F87171"), QColor("#1E0D0D")),
-    "cancelled":   (QColor("#6B7280"), QColor("#151515")),
+    "queued":      (QColor("#9DA9B8"), QColor("#18222D")),
+    "downloading": (QColor("#D9A441"), QColor("#282316")),
+    "done":        (QColor("#4EBB78"), QColor("#18251C")),
+    "error":       (QColor("#D86C6C"), QColor("#281B1B")),
+    "cancelled":   (QColor("#7E8B9A"), QColor("#1A2028")),
 }
 
 
@@ -307,7 +307,7 @@ class QueueManager:
 
     def _delete_row_from_button(self, btn: QToolButton):
         if self._can_modify_fn and not self._can_modify_fn():
-            QMessageBox.warning(None, self._t("error"), self._t("cannot_edit_while_downloading"))
+            QMessageBox.warning(None, self._t("error_title"), self._t("cannot_edit_while_downloading"))
             return
 
         p = btn.mapTo(self._table.viewport(), QPoint(0, 0))
@@ -370,7 +370,7 @@ class QueueManager:
         # Don't allow edits while downloading (same logic you usas en UI)
         if parent is not None and getattr(parent, "status_key", "idle") == "downloading":
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.warning(parent, self._t("error"), self._t("cannot_edit_while_downloading"))
+            QMessageBox.warning(parent, self._t("error_title"), self._t("cannot_edit_while_downloading"))
             return
 
         if confirm and parent is not None:

@@ -1,23 +1,35 @@
 # app/ui/window.py
-"""Main window — thin shell: construction, layout, i18n binding, and wiring."""
+"""Main window: construction, layout, i18n binding, and wiring."""
 
 import os
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
-    QLabel, QComboBox, QProgressBar, QFrame,
-    QTableWidget, QHeaderView, QAbstractItemView, QSplitter
+    QAbstractItemView,
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QTableWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtGui import QFont, QIcon, Qt
 
 from app.downloader import MediaDownloader
-from app.ui.i18n import TRANSLATIONS
-from app.ui.widgets import add_shadow, set_elided
-from app.ui.style import main_qss
-from app.ui.settings import AppSettings
-from app.ui.queue_manager import QueueManager
 from app.ui.controller import MainController
+from app.ui.i18n import TRANSLATIONS
 from app.ui.now_downloading import NowDownloadingCard
+from app.ui.queue_manager import QueueManager
+from app.ui.settings import AppSettings
+from app.ui.style import main_qss
+from app.ui.widgets import add_shadow, set_elided
 
 
 class MainWindow(QMainWindow):
@@ -26,7 +38,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # Settings (persist language + folder)
         self.settings = AppSettings()
         self.lang = self.settings.get_language()
         self.output_folder = self.settings.get_output_folder()
@@ -45,17 +56,14 @@ class MainWindow(QMainWindow):
             app_font = QFont("Segoe UI", 10)
         self.setFont(app_font)
 
-        self._i18n_bindings = []  # list of (widget, key, attr)
+        self._i18n_bindings = []
 
-        # Build widgets first
         self.build_ui()
         self.apply_style()
 
-        # Create queue manager + controller AFTER widgets exist
         self.queue = QueueManager(self.queue_table, t_fn=self._t)
         self.ctrl = MainController(self)
 
-        # Now that queue exists, you can safely apply language
         self.apply_language(self.lang)
         self.settings.restore_geometry(self)
         self.queue.load(self._settings_get)
@@ -68,14 +76,10 @@ class MainWindow(QMainWindow):
         self.settings.save_geometry(self)
         super().closeEvent(event)
 
-    # ---- i18n helpers ----
-
     def _t(self, key: str) -> str:
-        """Translate *key* using the current language."""
         return TRANSLATIONS.get(self.lang, TRANSLATIONS["en"]).get(key, key)
 
     def _tf(self, key: str, **kwargs) -> str:
-        """Translate *key* and format with *kwargs*."""
         template = self._t(key)
         try:
             return template.format(**kwargs)
@@ -83,31 +87,25 @@ class MainWindow(QMainWindow):
             return template
 
     def _bind_text(self, widget, key: str):
-        """Register a widget for automatic text update on language change."""
         self._i18n_bindings.append((widget, key, "text"))
 
     def apply_language(self, lang: str):
-        """Switch UI language and refresh all bound widgets."""
         self.lang = "es" if lang == "es" else "en"
         self.settings.set_language(self.lang)
         self.setWindowTitle(self._t("app_name"))
 
-        # Update all bound labels/buttons
-        for w, key, attr in self._i18n_bindings:
+        for widget, key, attr in self._i18n_bindings:
             if attr == "text":
-                w.setText(self._t(key))
+                widget.setText(self._t(key))
 
-        # These widgets always exist after build_ui
         self.lang_label.setText(self._t("language"))
         self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
 
-        # Update button text state
         if self.download_btn.isEnabled():
             self.download_btn.setText(self._t("download"))
         else:
             self.download_btn.setText(self._t("downloading"))
 
-        # Queue/now card may not exist during early init signals (guard)
         if hasattr(self, "queue"):
             self.queue.set_t(self._t)
             self.queue.refresh_headers()
@@ -115,13 +113,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "now_card"):
             self.now_card.set_t(self._t)
 
-        # Also refresh the expand/clear button text (they are bound but safe)
         if hasattr(self, "expand_queue_btn"):
             self.expand_queue_btn.setText(self._t("expand_table"))
         if hasattr(self, "clear_queue_btn"):
             self.clear_queue_btn.setText(self._t("clear_queue"))
-
-    # ---- settings convenience ----
 
     def _settings_get(self, key: str, default=None):
         s = getattr(self.settings, "qs", self.settings)
@@ -131,15 +126,13 @@ class MainWindow(QMainWindow):
         s = getattr(self.settings, "qs", self.settings)
         s.setValue(key, value)
 
-    # ---- UI construction ----
-
     def build_ui(self):
         root = QWidget()
         self.setCentralWidget(root)
 
         main = QHBoxLayout(root)
         main.setContentsMargins(18, 18, 18, 18)
-        main.setSpacing(14)
+        main.setSpacing(16)
 
         self._build_sidebar()
         self._build_content()
@@ -147,138 +140,169 @@ class MainWindow(QMainWindow):
         main.addWidget(self.sidebar)
         main.addWidget(self.content, 1)
 
-        # Shadows
-        add_shadow(self.sidebar, color_hex="#0EA5E9", blur=28, x=0, y=10, alpha=35)
-        add_shadow(self.content, color_hex="#A855F7", blur=28, x=0, y=10, alpha=25)
-        add_shadow(self.download_btn, color_hex="#FB7185", blur=30, x=0, y=10, alpha=45)
+        add_shadow(self.sidebar, color_hex="#000000", blur=20, x=0, y=8, alpha=48)
+        add_shadow(self.content, color_hex="#000000", blur=22, x=0, y=8, alpha=34)
 
-        # Load lang selection into combo WITHOUT crashing
         idx = 0 if self.lang == "en" else 1
-        self.lang_combo.blockSignals(True)   # 🔥 prevents early currentIndexChanged
+        self.lang_combo.blockSignals(True)
         self.lang_combo.setCurrentIndex(idx)
         self.lang_combo.blockSignals(False)
-
-    # ---- sidebar ----
 
     def _build_sidebar(self):
         self.sidebar = QFrame()
         self.sidebar.setObjectName("Sidebar")
-        self.sidebar.setFixedWidth(290)
-        s = QVBoxLayout(self.sidebar)
-        s.setSpacing(10)
-        s.setContentsMargins(16, 16, 16, 16)
+        self.sidebar.setFixedWidth(304)
+
+        layout = QVBoxLayout(self.sidebar)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(16)
+
+        brand_panel = QFrame()
+        brand_panel.setObjectName("SidebarHero")
+        brand_layout = QVBoxLayout(brand_panel)
+        brand_layout.setContentsMargins(14, 14, 14, 14)
+        brand_layout.setSpacing(4)
+
+        self.brand_eyebrow = QLabel()
+        self.brand_eyebrow.setObjectName("SidebarEyebrow")
+        self._bind_text(self.brand_eyebrow, "sidebar_eyebrow")
+        brand_layout.addWidget(self.brand_eyebrow)
 
         self.brand = QLabel("YouToMp3")
         self.brand.setObjectName("BrandTitle")
-        self.brand_sub = QLabel("Desktop Media Downloader")
+        brand_layout.addWidget(self.brand)
+
+        self.brand_sub = QLabel()
         self.brand_sub.setObjectName("BrandSub")
-        s.addWidget(self.brand)
-        s.addWidget(self.brand_sub)
+        self.brand_sub.setWordWrap(True)
+        self._bind_text(self.brand_sub, "brand_subtitle")
+        brand_layout.addWidget(self.brand_sub)
+        layout.addWidget(brand_panel)
 
-        div = QFrame()
-        div.setObjectName("Divider")
-        div.setFixedHeight(1)
-        s.addWidget(div)
+        format_group = self._make_sidebar_group("settings_group_title", "settings_group_subtitle")
+        format_layout = format_group.layout()
 
-        # Format
         self.lbl_format = QLabel()
+        self.lbl_format.setObjectName("SidebarLabel")
         self._bind_text(self.lbl_format, "format")
-        s.addWidget(self.lbl_format)
+        format_layout.addWidget(self.lbl_format)
 
         self.format_box = QComboBox()
         self.format_box.addItems(["mp3", "wav", "m4a"])
-        s.addWidget(self.format_box)
+        format_layout.addWidget(self.format_box)
 
-        # Quality
         self.lbl_quality = QLabel()
+        self.lbl_quality.setObjectName("SidebarLabel")
         self._bind_text(self.lbl_quality, "quality")
-        s.addWidget(self.lbl_quality)
+        format_layout.addWidget(self.lbl_quality)
 
         self.quality_box = QComboBox()
         self.quality_box.addItems(["320", "192", "128"])
         self.quality_box.setCurrentText("192")
-        s.addWidget(self.quality_box)
+        format_layout.addWidget(self.quality_box)
+        layout.addWidget(format_group)
 
-        # Output
+        output_group = self._make_sidebar_group("output_group_title", "output_group_subtitle")
+        output_layout = output_group.layout()
+
         self.lbl_output = QLabel()
+        self.lbl_output.setObjectName("SidebarLabel")
         self._bind_text(self.lbl_output, "output")
-        s.addWidget(self.lbl_output)
+        output_layout.addWidget(self.lbl_output)
 
         self.folder_chip = QLabel(self.output_folder)
         self.folder_chip.setObjectName("Chip")
         self.folder_chip.setWordWrap(False)
         set_elided(self.folder_chip, self.output_folder)
-        s.addWidget(self.folder_chip)
+        output_layout.addWidget(self.folder_chip)
 
         self.folder_btn = QPushButton()
         self._bind_text(self.folder_btn, "select_folder")
         self.folder_btn.setObjectName("SecondaryButton")
-        # ctrl exists after __init__, but button clicks happen after init → ok
         self.folder_btn.clicked.connect(lambda: self.ctrl.select_folder())
-        s.addWidget(self.folder_btn)
+        output_layout.addWidget(self.folder_btn)
 
         self.open_folder_btn = QPushButton()
         self._bind_text(self.open_folder_btn, "open_output_folder")
         self.open_folder_btn.setObjectName("SecondaryButton")
         self.open_folder_btn.clicked.connect(lambda: self.ctrl.open_output_folder())
-        s.addWidget(self.open_folder_btn)
+        output_layout.addWidget(self.open_folder_btn)
+        layout.addWidget(output_group)
 
-        # Status
-        s.addSpacing(10)
+        status_group = self._make_sidebar_group("session_group_title", "session_group_subtitle")
+        status_layout = status_group.layout()
+
         self.lbl_status = QLabel()
+        self.lbl_status.setObjectName("SidebarLabel")
         self._bind_text(self.lbl_status, "status")
-        s.addWidget(self.lbl_status)
+        status_layout.addWidget(self.lbl_status)
 
         self.status_key = "idle"
         self.status_value = QLabel()
         self.status_value.setObjectName("Status")
-        s.addWidget(self.status_value)
+        self.status_value.setProperty("state", "idle")
+        status_layout.addWidget(self.status_value)
+        layout.addWidget(status_group)
 
-        s.addStretch(1)
-
-    # ---- content panel ----
+        layout.addStretch(1)
 
     def _build_content(self):
         self.content = QFrame()
         self.content.setObjectName("Content")
-        c = QVBoxLayout(self.content)
-        c.setSpacing(12)
-        c.setContentsMargins(18, 16, 18, 16)
 
-        # ── Top bar ──
+        content_layout = QVBoxLayout(self.content)
+        content_layout.setContentsMargins(18, 18, 18, 18)
+        content_layout.setSpacing(14)
+
+        header_panel = QFrame()
+        header_panel.setObjectName("HeaderPanel")
+        header_layout = QVBoxLayout(header_panel)
+        header_layout.setContentsMargins(18, 18, 18, 18)
+        header_layout.setSpacing(14)
+
         top = QHBoxLayout()
-        left = QVBoxLayout()
-        left.setSpacing(2)
+        top.setSpacing(12)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(4)
+
+        self.header_eyebrow = QLabel()
+        self.header_eyebrow.setObjectName("HeaderEyebrow")
+        self._bind_text(self.header_eyebrow, "workspace_eyebrow")
+        title_col.addWidget(self.header_eyebrow)
 
         self.h1 = QLabel()
         self.h1.setObjectName("H1")
         self._bind_text(self.h1, "paste_urls")
+        title_col.addWidget(self.h1)
 
         self.h2 = QLabel()
         self.h2.setObjectName("H2")
         self._bind_text(self.h2, "one_per_line")
+        title_col.addWidget(self.h2)
 
-        left.addWidget(self.h1)
-        left.addWidget(self.h2)
-        top.addLayout(left, 1)
+        top.addLayout(title_col, 1)
 
-        lang_box = QHBoxLayout()
-        lang_box.setSpacing(8)
+        lang_wrap = QFrame()
+        lang_wrap.setObjectName("InlinePanel")
+        lang_layout = QHBoxLayout(lang_wrap)
+        lang_layout.setContentsMargins(12, 8, 12, 8)
+        lang_layout.setSpacing(8)
+
         self.lang_label = QLabel()
         self.lang_label.setObjectName("LangLabel")
-        lang_box.addWidget(self.lang_label)
+        lang_layout.addWidget(self.lang_label)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItem("English", "en")
-        self.lang_combo.addItem("Español", "es")
+        self.lang_combo.addItem("Espanol", "es")
         self.lang_combo.setObjectName("LangCombo")
         self.lang_combo.currentIndexChanged.connect(self._on_lang_change)
-        lang_box.addWidget(self.lang_combo)
+        lang_layout.addWidget(self.lang_combo)
 
-        top.addLayout(lang_box)
-        c.addLayout(top)
+        top.addWidget(lang_wrap)
+        header_layout.addLayout(top)
 
-        # ── Progress bar + Download button ──
         actions = QHBoxLayout()
         actions.setSpacing(12)
 
@@ -293,83 +317,98 @@ class MainWindow(QMainWindow):
         self.download_btn.clicked.connect(lambda: self.ctrl.start_download())
         actions.addWidget(self.download_btn)
 
-        c.addLayout(actions)
+        header_layout.addLayout(actions)
+        content_layout.addWidget(header_panel)
 
         self.now_label = QLabel("")
         self.now_label.setObjectName("NowLabel")
-        c.addWidget(self.now_label)
+        content_layout.addWidget(self.now_label)
 
-        # ══ Two-column body ══
         body_splitter = QSplitter(Qt.Horizontal)
         body_splitter.setChildrenCollapsible(False)
+        body_splitter.setHandleWidth(8)
 
-        # ── LEFT ──
         left_panel = QFrame()
-        left_lay = QVBoxLayout(left_panel)
-        left_lay.setContentsMargins(0, 0, 0, 0)
-        left_lay.setSpacing(10)
+        left_panel.setObjectName("Panel")
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(16, 16, 16, 16)
+        left_layout.setSpacing(12)
 
-        action_row = QHBoxLayout()
-        action_row.setSpacing(8)
+        left_layout.addWidget(self._make_panel_header("queue_input_title", "queue_input_subtitle"))
+
+        action_wrap = QFrame()
+        action_wrap.setObjectName("ActionBar")
+        action_layout = QHBoxLayout(action_wrap)
+        action_layout.setContentsMargins(10, 10, 10, 10)
+        action_layout.setSpacing(8)
 
         self.btn_add_song = QPushButton()
         self._bind_text(self.btn_add_song, "add_song")
         self.btn_add_song.setObjectName("SecondaryButton")
         self.btn_add_song.clicked.connect(lambda: self.ctrl.open_add_song_dialog())
+        action_layout.addWidget(self.btn_add_song)
 
         self.btn_add_playlist = QPushButton()
         self._bind_text(self.btn_add_playlist, "add_playlist")
         self.btn_add_playlist.setObjectName("SecondaryButton")
         self.btn_add_playlist.clicked.connect(lambda: self.ctrl.open_add_playlist_dialog())
+        action_layout.addWidget(self.btn_add_playlist)
 
         self.btn_paste_batch = QPushButton()
         self._bind_text(self.btn_paste_batch, "paste_batch")
         self.btn_paste_batch.setObjectName("SecondaryButton")
         self.btn_paste_batch.clicked.connect(lambda: self.ctrl.open_paste_batch_dialog())
+        action_layout.addWidget(self.btn_paste_batch)
 
-        action_row.addWidget(self.btn_add_song)
-        action_row.addWidget(self.btn_add_playlist)
-        action_row.addWidget(self.btn_paste_batch)
-        left_lay.addLayout(action_row)
+        left_layout.addWidget(action_wrap)
 
         self.now_card = NowDownloadingCard(t_fn=self._t, parent=self)
-        left_lay.addWidget(self.now_card)
+        left_layout.addWidget(self.now_card)
 
-        console_label = QLabel()
-        console_label.setObjectName("SectionLabel")
-        self._bind_text(console_label, "console")
-        left_lay.addWidget(console_label)
+        console_panel = QFrame()
+        console_panel.setObjectName("SubPanel")
+        console_layout = QVBoxLayout(console_panel)
+        console_layout.setContentsMargins(14, 14, 14, 14)
+        console_layout.setSpacing(10)
+
+        console_layout.addWidget(self._make_compact_header("console_panel_title", "console_panel_subtitle"))
 
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setObjectName("ConsoleArea")
-        left_lay.addWidget(self.log_box, 1)
+        console_layout.addWidget(self.log_box, 1)
 
+        left_layout.addWidget(console_panel, 1)
         body_splitter.addWidget(left_panel)
 
-        # ── RIGHT: queue ──
         right_panel = QFrame()
-        right_lay = QVBoxLayout(right_panel)
-        right_lay.setContentsMargins(0, 0, 0, 0)
-        right_lay.setSpacing(6)
+        right_panel.setObjectName("Panel")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(16, 16, 16, 16)
+        right_layout.setSpacing(10)
 
-        queue_bar = QHBoxLayout()
-        queue_bar.addStretch(5)
+        right_layout.addWidget(self._make_panel_header("queue_panel_title", "queue_panel_subtitle"))
+
+        queue_bar = QFrame()
+        queue_bar.setObjectName("ActionBar")
+        queue_bar_layout = QHBoxLayout(queue_bar)
+        queue_bar_layout.setContentsMargins(10, 10, 10, 10)
+        queue_bar_layout.setSpacing(8)
+
 
         self.clear_queue_btn = QPushButton()
         self._bind_text(self.clear_queue_btn, "clear_queue")
         self.clear_queue_btn.setObjectName("SecondaryButton")
-        # ✅ connect safely — queue exists after __init__, but click happens after init
         self.clear_queue_btn.clicked.connect(self._on_clear_queue_clicked)
-        queue_bar.addWidget(self.clear_queue_btn)
+        queue_bar_layout.addWidget(self.clear_queue_btn)
 
         self.expand_queue_btn = QPushButton()
         self._bind_text(self.expand_queue_btn, "expand_table")
         self.expand_queue_btn.setObjectName("SecondaryButton")
         self.expand_queue_btn.clicked.connect(lambda: self.queue.open_modal(self))
-        queue_bar.addWidget(self.expand_queue_btn)
+        queue_bar_layout.addWidget(self.expand_queue_btn)
 
-        right_lay.addLayout(queue_bar)
+        right_layout.addWidget(queue_bar)
 
         self.queue_table = QTableWidget(0, 7)
         self.queue_table.setObjectName("QueueTable")
@@ -382,16 +421,16 @@ class MainWindow(QMainWindow):
             self._t("col_output"),
             "",
         ])
-        self.queue_table.verticalHeader().setDefaultSectionSize(90)
+        self.queue_table.verticalHeader().setDefaultSectionSize(74)
 
-        hdr = self.queue_table.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.Stretch)
-        hdr.setSectionResizeMode(1, QHeaderView.Stretch)
-        hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        hdr.setSectionResizeMode(5, QHeaderView.Stretch)
-        hdr.setSectionResizeMode(6, QHeaderView.Fixed)
+        header = self.queue_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.Stretch)
+        header.setSectionResizeMode(6, QHeaderView.Fixed)
         self.queue_table.setColumnWidth(6, 36)
 
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -399,47 +438,89 @@ class MainWindow(QMainWindow):
         self.queue_table.setAlternatingRowColors(True)
         self.queue_table.verticalHeader().setVisible(False)
         self.queue_table.setShowGrid(False)
+        self.queue_table.setWordWrap(False)
+        right_layout.addWidget(self.queue_table, 1)
 
-        right_lay.addWidget(self.queue_table, 1)
         body_splitter.addWidget(right_panel)
-
-        body_splitter.setSizes([380, 560])
+        body_splitter.setSizes([390, 650])
         body_splitter.setStretchFactor(0, 2)
-        body_splitter.setStretchFactor(1, 3)
+        body_splitter.setStretchFactor(1, 4)
 
-        c.addWidget(body_splitter, 1)
+        content_layout.addWidget(body_splitter, 1)
 
-    # ---- actions ----
+    def _make_sidebar_group(self, title_key: str, subtitle_key: str):
+        group = QFrame()
+        group.setObjectName("SidebarGroup")
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        layout.addWidget(self._make_compact_header(title_key, subtitle_key, eyebrow_key="config_eyebrow"))
+        return group
+
+    def _make_panel_header(self, title_key: str, subtitle_key: str):
+        wrap = QFrame()
+        wrap.setObjectName("PanelHeader")
+        layout = QVBoxLayout(wrap)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(3)
+
+        title_lbl = QLabel()
+        title_lbl.setObjectName("PanelTitle")
+        self._bind_text(title_lbl, title_key)
+        subtitle_lbl = QLabel()
+        subtitle_lbl.setObjectName("PanelSubtitle")
+        subtitle_lbl.setWordWrap(True)
+        self._bind_text(subtitle_lbl, subtitle_key)
+
+        layout.addWidget(title_lbl)
+        layout.addWidget(subtitle_lbl)
+        return wrap
+
+    def _make_compact_header(self, title_key: str, subtitle_key: str, eyebrow_key: str | None = None):
+        wrap = QFrame()
+        wrap.setObjectName("CompactHeader")
+        layout = QVBoxLayout(wrap)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        if eyebrow_key:
+            eyebrow_lbl = QLabel()
+            eyebrow_lbl.setObjectName("CompactEyebrow")
+            self._bind_text(eyebrow_lbl, eyebrow_key)
+            layout.addWidget(eyebrow_lbl)
+
+        title_lbl = QLabel()
+        title_lbl.setObjectName("CompactTitle")
+        self._bind_text(title_lbl, title_key)
+        layout.addWidget(title_lbl)
+
+        subtitle_lbl = QLabel()
+        subtitle_lbl.setObjectName("CompactSubtitle")
+        subtitle_lbl.setWordWrap(True)
+        self._bind_text(subtitle_lbl, subtitle_key)
+        layout.addWidget(subtitle_lbl)
+
+        return wrap
 
     def _on_clear_queue_clicked(self):
-        # queue exists after init, but guard just in case
         if not hasattr(self, "queue"):
             return
-        # call QueueManager.clear (we'll add it below)
         self.queue.clear(settings_set_fn=self._settings_set, parent=self, confirm=True)
-
-    # ---- style ----
 
     def apply_style(self):
         self.setStyleSheet(main_qss())
-
-    # ---- small utilities ----
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         set_elided(self.folder_chip, self.output_folder)
 
     def _on_lang_change(self):
-        # prevent early crash if triggered during init for any reason
         if not hasattr(self, "queue"):
-            # still update language variables + basic bound texts safely
             lang = self.lang_combo.currentData()
             self.lang = "es" if lang == "es" else "en"
             return
-
-        lang = self.lang_combo.currentData()
-        self.apply_language(lang)
+        self.apply_language(self.lang_combo.currentData())
 
     def add_log(self, text: str):
-        """Append a line to the console area."""
         self.log_box.append(text)
