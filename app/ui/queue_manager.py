@@ -307,7 +307,7 @@ class QueueManager:
 
     def _delete_row_from_button(self, btn: QToolButton):
         if self._can_modify_fn and not self._can_modify_fn():
-            QMessageBox.warning(None, self._t("error"), self._t("cannot_edit_while_downloading"))
+            QMessageBox.warning(None, self._t("error_title"), self._t("cannot_edit_while_downloading"))
             return
 
         p = btn.mapTo(self._table.viewport(), QPoint(0, 0))
@@ -370,7 +370,7 @@ class QueueManager:
         # Don't allow edits while downloading (same logic you usas en UI)
         if parent is not None and getattr(parent, "status_key", "idle") == "downloading":
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.warning(parent, self._t("error"), self._t("cannot_edit_while_downloading"))
+            QMessageBox.warning(parent, self._t("error_title"), self._t("cannot_edit_while_downloading"))
             return
 
         if confirm and parent is not None:

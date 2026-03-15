@@ -131,7 +131,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
         main = QHBoxLayout(root)
-        main.setContentsMargins(20, 20, 20, 20)
+        main.setContentsMargins(18, 18, 18, 18)
         main.setSpacing(16)
 
         self._build_sidebar()
@@ -140,8 +140,8 @@ class MainWindow(QMainWindow):
         main.addWidget(self.sidebar)
         main.addWidget(self.content, 1)
 
-        add_shadow(self.sidebar, color_hex="#000000", blur=20, x=0, y=8, alpha=50)
-        add_shadow(self.content, color_hex="#000000", blur=22, x=0, y=8, alpha=35)
+        add_shadow(self.sidebar, color_hex="#000000", blur=20, x=0, y=8, alpha=48)
+        add_shadow(self.content, color_hex="#000000", blur=22, x=0, y=8, alpha=34)
 
         idx = 0 if self.lang == "en" else 1
         self.lang_combo.blockSignals(True)
@@ -151,26 +151,35 @@ class MainWindow(QMainWindow):
     def _build_sidebar(self):
         self.sidebar = QFrame()
         self.sidebar.setObjectName("Sidebar")
-        self.sidebar.setFixedWidth(292)
+        self.sidebar.setFixedWidth(304)
 
         layout = QVBoxLayout(self.sidebar)
         layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
+        layout.setSpacing(16)
+
+        brand_panel = QFrame()
+        brand_panel.setObjectName("SidebarHero")
+        brand_layout = QVBoxLayout(brand_panel)
+        brand_layout.setContentsMargins(14, 14, 14, 14)
+        brand_layout.setSpacing(4)
+
+        self.brand_eyebrow = QLabel()
+        self.brand_eyebrow.setObjectName("SidebarEyebrow")
+        self._bind_text(self.brand_eyebrow, "sidebar_eyebrow")
+        brand_layout.addWidget(self.brand_eyebrow)
 
         self.brand = QLabel("YouToMp3")
         self.brand.setObjectName("BrandTitle")
-        self.brand_sub = QLabel("Desktop media downloader")
+        brand_layout.addWidget(self.brand)
+
+        self.brand_sub = QLabel()
         self.brand_sub.setObjectName("BrandSub")
         self.brand_sub.setWordWrap(True)
-        layout.addWidget(self.brand)
-        layout.addWidget(self.brand_sub)
+        self._bind_text(self.brand_sub, "brand_subtitle")
+        brand_layout.addWidget(self.brand_sub)
+        layout.addWidget(brand_panel)
 
-        divider = QFrame()
-        divider.setObjectName("Divider")
-        divider.setFixedHeight(1)
-        layout.addWidget(divider)
-
-        format_group = self._make_sidebar_group()
+        format_group = self._make_sidebar_group("settings_group_title", "settings_group_subtitle")
         format_layout = format_group.layout()
 
         self.lbl_format = QLabel()
@@ -193,7 +202,7 @@ class MainWindow(QMainWindow):
         format_layout.addWidget(self.quality_box)
         layout.addWidget(format_group)
 
-        output_group = self._make_sidebar_group()
+        output_group = self._make_sidebar_group("output_group_title", "output_group_subtitle")
         output_layout = output_group.layout()
 
         self.lbl_output = QLabel()
@@ -220,7 +229,7 @@ class MainWindow(QMainWindow):
         output_layout.addWidget(self.open_folder_btn)
         layout.addWidget(output_group)
 
-        status_group = self._make_sidebar_group()
+        status_group = self._make_sidebar_group("session_group_title", "session_group_subtitle")
         status_layout = status_group.layout()
 
         self.lbl_status = QLabel()
@@ -248,14 +257,19 @@ class MainWindow(QMainWindow):
         header_panel = QFrame()
         header_panel.setObjectName("HeaderPanel")
         header_layout = QVBoxLayout(header_panel)
-        header_layout.setContentsMargins(16, 16, 16, 16)
-        header_layout.setSpacing(12)
+        header_layout.setContentsMargins(18, 18, 18, 18)
+        header_layout.setSpacing(14)
 
         top = QHBoxLayout()
         top.setSpacing(12)
 
         title_col = QVBoxLayout()
-        title_col.setSpacing(2)
+        title_col.setSpacing(4)
+
+        self.header_eyebrow = QLabel()
+        self.header_eyebrow.setObjectName("HeaderEyebrow")
+        self._bind_text(self.header_eyebrow, "workspace_eyebrow")
+        title_col.addWidget(self.header_eyebrow)
 
         self.h1 = QLabel()
         self.h1.setObjectName("H1")
@@ -269,21 +283,24 @@ class MainWindow(QMainWindow):
 
         top.addLayout(title_col, 1)
 
-        lang_box = QHBoxLayout()
-        lang_box.setSpacing(8)
+        lang_wrap = QFrame()
+        lang_wrap.setObjectName("InlinePanel")
+        lang_layout = QHBoxLayout(lang_wrap)
+        lang_layout.setContentsMargins(12, 8, 12, 8)
+        lang_layout.setSpacing(8)
 
         self.lang_label = QLabel()
         self.lang_label.setObjectName("LangLabel")
-        lang_box.addWidget(self.lang_label)
+        lang_layout.addWidget(self.lang_label)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItem("English", "en")
         self.lang_combo.addItem("Espanol", "es")
         self.lang_combo.setObjectName("LangCombo")
         self.lang_combo.currentIndexChanged.connect(self._on_lang_change)
-        lang_box.addWidget(self.lang_combo)
+        lang_layout.addWidget(self.lang_combo)
 
-        top.addLayout(lang_box)
+        top.addWidget(lang_wrap)
         header_layout.addLayout(top)
 
         actions = QHBoxLayout()
@@ -317,28 +334,33 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(16, 16, 16, 16)
         left_layout.setSpacing(12)
 
-        action_row = QHBoxLayout()
-        action_row.setSpacing(8)
+        left_layout.addWidget(self._make_panel_header("queue_input_title", "queue_input_subtitle"))
+
+        action_wrap = QFrame()
+        action_wrap.setObjectName("ActionBar")
+        action_layout = QHBoxLayout(action_wrap)
+        action_layout.setContentsMargins(10, 10, 10, 10)
+        action_layout.setSpacing(8)
 
         self.btn_add_song = QPushButton()
         self._bind_text(self.btn_add_song, "add_song")
         self.btn_add_song.setObjectName("SecondaryButton")
         self.btn_add_song.clicked.connect(lambda: self.ctrl.open_add_song_dialog())
-        action_row.addWidget(self.btn_add_song)
+        action_layout.addWidget(self.btn_add_song)
 
         self.btn_add_playlist = QPushButton()
         self._bind_text(self.btn_add_playlist, "add_playlist")
         self.btn_add_playlist.setObjectName("SecondaryButton")
         self.btn_add_playlist.clicked.connect(lambda: self.ctrl.open_add_playlist_dialog())
-        action_row.addWidget(self.btn_add_playlist)
+        action_layout.addWidget(self.btn_add_playlist)
 
         self.btn_paste_batch = QPushButton()
         self._bind_text(self.btn_paste_batch, "paste_batch")
         self.btn_paste_batch.setObjectName("SecondaryButton")
         self.btn_paste_batch.clicked.connect(lambda: self.ctrl.open_paste_batch_dialog())
-        action_row.addWidget(self.btn_paste_batch)
+        action_layout.addWidget(self.btn_paste_batch)
 
-        left_layout.addLayout(action_row)
+        left_layout.addWidget(action_wrap)
 
         self.now_card = NowDownloadingCard(t_fn=self._t, parent=self)
         left_layout.addWidget(self.now_card)
@@ -347,12 +369,9 @@ class MainWindow(QMainWindow):
         console_panel.setObjectName("SubPanel")
         console_layout = QVBoxLayout(console_panel)
         console_layout.setContentsMargins(14, 14, 14, 14)
-        console_layout.setSpacing(8)
+        console_layout.setSpacing(10)
 
-        console_label = QLabel()
-        console_label.setObjectName("SectionLabel")
-        self._bind_text(console_label, "console")
-        console_layout.addWidget(console_label)
+        console_layout.addWidget(self._make_compact_header("console_panel_title", "console_panel_subtitle"))
 
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
@@ -368,28 +387,28 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(16, 16, 16, 16)
         right_layout.setSpacing(10)
 
-        queue_bar = QHBoxLayout()
-        queue_bar.setSpacing(8)
+        right_layout.addWidget(self._make_panel_header("queue_panel_title", "queue_panel_subtitle"))
 
-        self.queue_title = QLabel()
-        self.queue_title.setObjectName("SectionLabel")
-        self._bind_text(self.queue_title, "downloads_queue")
-        queue_bar.addWidget(self.queue_title)
-        queue_bar.addStretch(1)
+        queue_bar = QFrame()
+        queue_bar.setObjectName("ActionBar")
+        queue_bar_layout = QHBoxLayout(queue_bar)
+        queue_bar_layout.setContentsMargins(10, 10, 10, 10)
+        queue_bar_layout.setSpacing(8)
+
 
         self.clear_queue_btn = QPushButton()
         self._bind_text(self.clear_queue_btn, "clear_queue")
         self.clear_queue_btn.setObjectName("SecondaryButton")
         self.clear_queue_btn.clicked.connect(self._on_clear_queue_clicked)
-        queue_bar.addWidget(self.clear_queue_btn)
+        queue_bar_layout.addWidget(self.clear_queue_btn)
 
         self.expand_queue_btn = QPushButton()
         self._bind_text(self.expand_queue_btn, "expand_table")
         self.expand_queue_btn.setObjectName("SecondaryButton")
         self.expand_queue_btn.clicked.connect(lambda: self.queue.open_modal(self))
-        queue_bar.addWidget(self.expand_queue_btn)
+        queue_bar_layout.addWidget(self.expand_queue_btn)
 
-        right_layout.addLayout(queue_bar)
+        right_layout.addWidget(queue_bar)
 
         self.queue_table = QTableWidget(0, 7)
         self.queue_table.setObjectName("QueueTable")
@@ -402,7 +421,7 @@ class MainWindow(QMainWindow):
             self._t("col_output"),
             "",
         ])
-        self.queue_table.verticalHeader().setDefaultSectionSize(80)
+        self.queue_table.verticalHeader().setDefaultSectionSize(74)
 
         header = self.queue_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -419,22 +438,70 @@ class MainWindow(QMainWindow):
         self.queue_table.setAlternatingRowColors(True)
         self.queue_table.verticalHeader().setVisible(False)
         self.queue_table.setShowGrid(False)
+        self.queue_table.setWordWrap(False)
         right_layout.addWidget(self.queue_table, 1)
 
         body_splitter.addWidget(right_panel)
-        body_splitter.setSizes([380, 620])
+        body_splitter.setSizes([390, 650])
         body_splitter.setStretchFactor(0, 2)
-        body_splitter.setStretchFactor(1, 3)
+        body_splitter.setStretchFactor(1, 4)
 
         content_layout.addWidget(body_splitter, 1)
 
-    def _make_sidebar_group(self):
+    def _make_sidebar_group(self, title_key: str, subtitle_key: str):
         group = QFrame()
         group.setObjectName("SidebarGroup")
         layout = QVBoxLayout(group)
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
+
+        layout.addWidget(self._make_compact_header(title_key, subtitle_key, eyebrow_key="config_eyebrow"))
         return group
+
+    def _make_panel_header(self, title_key: str, subtitle_key: str):
+        wrap = QFrame()
+        wrap.setObjectName("PanelHeader")
+        layout = QVBoxLayout(wrap)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(3)
+
+        title_lbl = QLabel()
+        title_lbl.setObjectName("PanelTitle")
+        self._bind_text(title_lbl, title_key)
+        subtitle_lbl = QLabel()
+        subtitle_lbl.setObjectName("PanelSubtitle")
+        subtitle_lbl.setWordWrap(True)
+        self._bind_text(subtitle_lbl, subtitle_key)
+
+        layout.addWidget(title_lbl)
+        layout.addWidget(subtitle_lbl)
+        return wrap
+
+    def _make_compact_header(self, title_key: str, subtitle_key: str, eyebrow_key: str | None = None):
+        wrap = QFrame()
+        wrap.setObjectName("CompactHeader")
+        layout = QVBoxLayout(wrap)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        if eyebrow_key:
+            eyebrow_lbl = QLabel()
+            eyebrow_lbl.setObjectName("CompactEyebrow")
+            self._bind_text(eyebrow_lbl, eyebrow_key)
+            layout.addWidget(eyebrow_lbl)
+
+        title_lbl = QLabel()
+        title_lbl.setObjectName("CompactTitle")
+        self._bind_text(title_lbl, title_key)
+        layout.addWidget(title_lbl)
+
+        subtitle_lbl = QLabel()
+        subtitle_lbl.setObjectName("CompactSubtitle")
+        subtitle_lbl.setWordWrap(True)
+        self._bind_text(subtitle_lbl, subtitle_key)
+        layout.addWidget(subtitle_lbl)
+
+        return wrap
 
     def _on_clear_queue_clicked(self):
         if not hasattr(self, "queue"):

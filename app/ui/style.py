@@ -1,21 +1,28 @@
 # app/ui/style.py
 """Centralized QSS stylesheet for the application."""
 
-APP_BG = "#0F141B"
-SURFACE = "#151C24"
-SURFACE_ALT = "#111820"
-SURFACE_SUBTLE = "#1A2430"
-BORDER = "#2A3644"
-BORDER_STRONG = "#344356"
+APP_BG = "#0E131A"
+SURFACE = "#161C24"
+SURFACE_ALT = "#121821"
+SURFACE_ELEVATED = "#1A2430"
+SURFACE_ACCENT = "#1A2233"
+PANEL_EDGE = "#263140"
+BORDER = "#2B3645"
+BORDER_STRONG = "#3B4A5E"
 TEXT = "#E7EDF5"
-TEXT_MUTED = "#9DA9B8"
-TEXT_FAINT = "#7E8B9A"
-ACCENT = "#5D8EF6"
-ACCENT_HOVER = "#76A2FF"
-SELECTION = "#253247"
-SUCCESS = "#4EBB78"
-WARNING = "#D9A441"
-DANGER = "#D86C6C"
+TEXT_MUTED = "#A0ACBA"
+TEXT_FAINT = "#7C8898"
+ACCENT = "#5E8BEE"
+ACCENT_HOVER = "#76A0F5"
+ACCENT_SOFT = "#233552"
+ACCENT_SOFT_ALT = "#1E2B41"
+SELECTION = "#243449"
+SUCCESS = "#4DBA79"
+SUCCESS_SOFT = "#16271F"
+WARNING = "#D2A34A"
+WARNING_SOFT = "#2A2417"
+DANGER = "#D86D6D"
+DANGER_SOFT = "#2A1C1C"
 
 
 def main_qss() -> str:
@@ -45,42 +52,92 @@ def main_qss() -> str:
 
         #Sidebar {{
             background: {SURFACE_ALT};
+            border-color: {PANEL_EDGE};
+        }}
+
+        #SidebarHero {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 {SURFACE_ACCENT}, stop:1 {SURFACE_ALT});
+            border: 1px solid {PANEL_EDGE};
+            border-radius: 12px;
+        }}
+
+        #HeaderPanel {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 {SURFACE_ACCENT}, stop:1 {SURFACE});
+            border-color: {PANEL_EDGE};
+        }}
+
+        #SidebarGroup, #SubPanel, #ActionBar, #InlinePanel, #FormPanel {{
+            background: {SURFACE_ELEVATED};
+            border: 1px solid {BORDER};
+            border-radius: 12px;
         }}
 
         QLabel {{
             color: {TEXT};
         }}
 
+        #SidebarEyebrow, #HeaderEyebrow, #CompactEyebrow {{
+            color: {ACCENT_HOVER};
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+        }}
+
         #BrandTitle {{
-            font-size: 24px;
+            font-size: 25px;
             font-weight: 800;
+            color: {TEXT};
         }}
 
         #BrandSub {{
             color: {TEXT_MUTED};
             font-size: 12px;
+            line-height: 1.4;
         }}
 
-        #Divider {{
-            background: {BORDER};
-            margin: 4px 0 2px 0;
+        #PanelTitle, #DialogTitle {{
+            font-size: 15px;
+            font-weight: 700;
+            color: {TEXT};
         }}
 
-        #SidebarLabel, #SectionLabel {{
+        #PanelSubtitle, #DialogSubtitle, #CompactSubtitle {{
+            color: {TEXT_MUTED};
+            font-size: 12px;
+        }}
+
+        #CompactTitle, #ToolbarLabel {{
+            color: {TEXT};
+            font-size: 12px;
+            font-weight: 700;
+        }}
+
+        #SidebarLabel, #SectionLabel, #FormLabel {{
             color: {TEXT_MUTED};
             font-size: 11px;
             font-weight: 700;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
         }}
 
         #H1 {{
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 800;
             color: {TEXT};
         }}
 
         #H2, #LangLabel, #NowLabel {{
             color: {TEXT_MUTED};
+        }}
+
+        #NowLabel {{
+            padding-left: 4px;
+        }}
+
+        #Divider {{
+            background: {BORDER};
+            margin: 4px 0 2px 0;
         }}
 
         QComboBox, QLineEdit, QSpinBox, QTextEdit {{
@@ -100,11 +157,12 @@ def main_qss() -> str:
 
         QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QTextEdit:focus {{
             border: 1px solid {ACCENT};
+            background: {SURFACE};
         }}
 
-        QComboBox::drop-down {{
+        QComboBox::drop-down, QSpinBox::up-button, QSpinBox::down-button {{
             border: none;
-            width: 32px;
+            width: 28px;
         }}
 
         QComboBox QAbstractItemView {{
@@ -124,7 +182,7 @@ def main_qss() -> str:
         }}
 
         QPushButton {{
-            background: {SURFACE_SUBTLE};
+            background: {SURFACE_ELEVATED};
             border: 1px solid {BORDER};
             border-radius: 10px;
             color: {TEXT};
@@ -146,27 +204,24 @@ def main_qss() -> str:
         QPushButton:disabled {{
             color: {TEXT_FAINT};
             background: {SURFACE_ALT};
+            border-color: {BORDER};
         }}
 
         #PrimaryButton {{
-            background: {ACCENT};
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 {ACCENT}, stop:1 {ACCENT_HOVER});
             border-color: {ACCENT};
             color: #FFFFFF;
-            min-width: 160px;
+            min-width: 164px;
             font-weight: 700;
         }}
 
         #PrimaryButton:hover {{
-            background: {ACCENT_HOVER};
             border-color: {ACCENT_HOVER};
         }}
 
-        #PrimaryButton:pressed {{
-            background: {ACCENT};
-        }}
-
         #SecondaryButton {{
-            background: {SURFACE_SUBTLE};
+            background: {SURFACE_ELEVATED};
             border-color: {BORDER};
             color: {TEXT};
         }}
@@ -185,21 +240,28 @@ def main_qss() -> str:
         }}
 
         QProgressBar#Progress::chunk {{
-            background: {ACCENT};
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 {ACCENT}, stop:1 {ACCENT_HOVER});
             border-radius: 10px;
         }}
 
         QLabel#Status {{
             font-weight: 700;
             font-size: 13px;
+            padding: 6px 10px;
+            border-radius: 10px;
         }}
 
         QLabel#Status[state="idle"] {{
             color: {SUCCESS};
+            background: {SUCCESS_SOFT};
+            border: 1px solid rgba(77,186,121,0.22);
         }}
 
         QLabel#Status[state="downloading"] {{
-            color: {ACCENT};
+            color: {ACCENT_HOVER};
+            background: {ACCENT_SOFT};
+            border: 1px solid rgba(94,139,238,0.22);
         }}
 
         QTextEdit#TextArea {{
@@ -219,7 +281,7 @@ def main_qss() -> str:
 
         QTableWidget#QueueTable {{
             background: {SURFACE};
-            alternate-background-color: {SURFACE_SUBTLE};
+            alternate-background-color: {SURFACE_ALT};
             color: {TEXT};
             border: 1px solid {BORDER};
             border-radius: 12px;
@@ -235,13 +297,13 @@ def main_qss() -> str:
         }}
 
         QTableWidget#QueueTable::item:hover {{
-            background: {SELECTION};
+            background: {ACCENT_SOFT_ALT};
         }}
 
         QTableWidget#QueueTable QHeaderView::section {{
             background: {SURFACE_ALT};
             color: {TEXT_MUTED};
-            padding: 10px 8px;
+            padding: 9px 8px;
             border: none;
             border-bottom: 1px solid {BORDER};
             font-weight: 700;
@@ -255,7 +317,19 @@ def main_qss() -> str:
         }}
 
         #NowDownloadingCard {{
-            background: {SURFACE_SUBTLE};
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 {SURFACE_ACCENT}, stop:1 {SURFACE_ELEVATED});
+            border-color: {PANEL_EDGE};
+        }}
+
+        #NDLiveTag {{
+            background: {WARNING_SOFT};
+            color: {WARNING};
+            border: 1px solid rgba(210,163,74,0.20);
+            border-radius: 10px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
         }}
 
         #NowDownloadingCard #NDTitle {{
@@ -277,7 +351,7 @@ def main_qss() -> str:
         }}
 
         #NowDownloadingCard #NDBadge {{
-            color: {ACCENT};
+            color: {ACCENT_HOVER};
             font-weight: 700;
         }}
 
@@ -285,6 +359,10 @@ def main_qss() -> str:
             background: {SURFACE_ALT};
             border: 1px solid {BORDER};
             border-radius: 10px;
+        }}
+
+        #DialogHeader {{
+            border-bottom: 1px solid {BORDER};
         }}
 
         QDialog QLabel {{
