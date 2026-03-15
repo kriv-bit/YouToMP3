@@ -158,7 +158,7 @@ TRANSLATIONS = {
         "clear_queue_confirm": "Eliminar todos los elementos de la cola? Esta accion no se puede deshacer.",
         "cannot_edit_while_downloading": "No puedes modificar la cola mientras se esta descargando.",
         "sidebar_eyebrow": "HERRAMIENTA",
-        "brand_subtitle": "Descargador de escritorio en mp3 y metadata",
+        "brand_subtitle": "Descargador de escritorio enfocado en mp3 y metadata",
         "workspace_eyebrow": "AREA DE COLA",
         "config_eyebrow": "CONFIG",
         "settings_group_title": "Ajustes de descarga",
