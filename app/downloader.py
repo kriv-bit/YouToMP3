@@ -74,12 +74,17 @@ class MediaDownloader:
                 "postprocessors": [
                     {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(quality)},
                     {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
-                    {"key": "EmbedThumbnail"},
                     {"key": "FFmpegMetadata"},
+                    {"key": "EmbedThumbnail"},
                 ],
                 "postprocessor_args": {
-    "FFmpegExtractAudio": ["-id3v2_version", "3"],
-},
+                    "EmbedThumbnail+ffmpeg_o": ["-id3v2_version", "3"],
+                    "FFmpegMetadata+ffmpeg_o": ["-id3v2_version", "3"],
+                },
+                "parse_metadata": [
+                    "%(uploader|)s:%(meta_artist)s",
+                ],
+                "verbose": True,
             }
             r = self._try_download_with_fallback(url, opts)
             base_path = r.get("base_path", "")
