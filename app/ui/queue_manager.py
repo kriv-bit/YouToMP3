@@ -16,11 +16,11 @@ from PySide6.QtCore import QPoint
 
 # Status → (foreground, background)
 STATUS_COLORS = {
-    "queued":      (QColor("#8899AA"), QColor("#131D2A")),
-    "downloading": (QColor("#F59E0B"), QColor("#1E1A0D")),
-    "done":        (QColor("#34D399"), QColor("#0D1E16")),
-    "error":       (QColor("#F87171"), QColor("#1E0D0D")),
-    "cancelled":   (QColor("#6B7280"), QColor("#151515")),
+    "queued":      (QColor("#9DA9B8"), QColor("#18222D")),
+    "downloading": (QColor("#D9A441"), QColor("#282316")),
+    "done":        (QColor("#4EBB78"), QColor("#18251C")),
+    "error":       (QColor("#D86C6C"), QColor("#281B1B")),
+    "cancelled":   (QColor("#7E8B9A"), QColor("#1A2028")),
 }
 
 

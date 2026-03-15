@@ -65,10 +65,13 @@ class MainController:
         self.win.status_key = key
         if key == "downloading":
             self.win.status_value.setText(self._t("downloading"))
-            self.win.status_value.setStyleSheet("color:#00D4FF; font-weight:900; font-size:13px;")
+            self.win.status_value.setProperty("state", "downloading")
         else:
             self.win.status_value.setText(self._t("idle"))
-            self.win.status_value.setStyleSheet("color:#34D399; font-weight:900; font-size:13px;")
+            self.win.status_value.setProperty("state", "idle")
+        self.win.status_value.style().unpolish(self.win.status_value)
+        self.win.status_value.style().polish(self.win.status_value)
+        self.win.status_value.update()
 
     # ---- dialog actions ----
 
