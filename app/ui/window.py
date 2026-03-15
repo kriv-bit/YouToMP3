@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
 
         main = QHBoxLayout(root)
         main.setContentsMargins(18, 18, 18, 18)
-        main.setSpacing(16)
+        main.setSpacing(14)
 
         self._build_sidebar()
         self._build_content()
@@ -155,13 +155,13 @@ class MainWindow(QMainWindow):
 
         layout = QVBoxLayout(self.sidebar)
         layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(16)
+        layout.setSpacing(13)
 
         brand_panel = QFrame()
         brand_panel.setObjectName("SidebarHero")
         brand_layout = QVBoxLayout(brand_panel)
         brand_layout.setContentsMargins(14, 14, 14, 14)
-        brand_layout.setSpacing(4)
+        brand_layout.setSpacing(6)
 
         self.brand_eyebrow = QLabel()
         self.brand_eyebrow.setObjectName("SidebarEyebrow")
@@ -252,13 +252,13 @@ class MainWindow(QMainWindow):
 
         content_layout = QVBoxLayout(self.content)
         content_layout.setContentsMargins(18, 18, 18, 18)
-        content_layout.setSpacing(14)
+        content_layout.setSpacing(12)
 
         header_panel = QFrame()
         header_panel.setObjectName("HeaderPanel")
         header_layout = QVBoxLayout(header_panel)
         header_layout.setContentsMargins(18, 18, 18, 18)
-        header_layout.setSpacing(14)
+        header_layout.setSpacing(12)
 
         top = QHBoxLayout()
         top.setSpacing(12)
@@ -332,14 +332,14 @@ class MainWindow(QMainWindow):
         left_panel.setObjectName("Panel")
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(16, 16, 16, 16)
-        left_layout.setSpacing(12)
+        left_layout.setSpacing(14)
 
         left_layout.addWidget(self._make_panel_header("queue_input_title", "queue_input_subtitle"))
 
         action_wrap = QFrame()
         action_wrap.setObjectName("ActionBar")
         action_layout = QHBoxLayout(action_wrap)
-        action_layout.setContentsMargins(10, 10, 10, 10)
+        action_layout.setContentsMargins(4, 4, 4, 4)
         action_layout.setSpacing(8)
 
         self.btn_add_song = QPushButton()
@@ -368,7 +368,7 @@ class MainWindow(QMainWindow):
         console_panel = QFrame()
         console_panel.setObjectName("SubPanel")
         console_layout = QVBoxLayout(console_panel)
-        console_layout.setContentsMargins(14, 14, 14, 14)
+        console_layout.setContentsMargins(12, 12, 12, 12)
         console_layout.setSpacing(10)
 
         console_layout.addWidget(self._make_compact_header("console_panel_title", "console_panel_subtitle"))
@@ -385,14 +385,14 @@ class MainWindow(QMainWindow):
         right_panel.setObjectName("Panel")
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(16, 16, 16, 16)
-        right_layout.setSpacing(10)
+        right_layout.setSpacing(12)
 
         right_layout.addWidget(self._make_panel_header("queue_panel_title", "queue_panel_subtitle"))
 
         queue_bar = QFrame()
         queue_bar.setObjectName("ActionBar")
         queue_bar_layout = QHBoxLayout(queue_bar)
-        queue_bar_layout.setContentsMargins(10, 10, 10, 10)
+        queue_bar_layout.setContentsMargins(4, 4, 4, 4)
         queue_bar_layout.setSpacing(8)
 
 
@@ -421,7 +421,7 @@ class MainWindow(QMainWindow):
             self._t("col_output"),
             "",
         ])
-        self.queue_table.verticalHeader().setDefaultSectionSize(74)
+        self.queue_table.verticalHeader().setDefaultSectionSize(72)
 
         header = self.queue_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -453,7 +453,7 @@ class MainWindow(QMainWindow):
         group.setObjectName("SidebarGroup")
         layout = QVBoxLayout(group)
         layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         layout.addWidget(self._make_compact_header(title_key, subtitle_key, eyebrow_key="config_eyebrow"))
         return group

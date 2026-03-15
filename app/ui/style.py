@@ -44,7 +44,7 @@ def main_qss() -> str:
             padding: 6px 8px;
         }}
 
-        #Sidebar, #Content, #Panel, #SubPanel, #HeaderPanel, #SidebarGroup, #NowDownloadingCard, #AppDialog {{
+        #Sidebar, #Content, #Panel, #SubPanel, #HeaderPanel, #NowDownloadingCard, #AppDialog {{
             background: {SURFACE};
             border: 1px solid {BORDER};
             border-radius: 14px;
@@ -68,10 +68,15 @@ def main_qss() -> str:
             border-color: {PANEL_EDGE};
         }}
 
-        #SidebarGroup, #SubPanel, #ActionBar, #InlinePanel, #FormPanel {{
+        #SubPanel, #InlinePanel, #FormPanel {{
             background: {SURFACE_ELEVATED};
             border: 1px solid {BORDER};
             border-radius: 12px;
+        }}
+
+        #SidebarGroup, #ActionBar {{
+            background: transparent;
+            border: none;
         }}
 
         QLabel {{
@@ -99,13 +104,13 @@ def main_qss() -> str:
 
         #PanelTitle, #DialogTitle {{
             font-size: 15px;
-            font-weight: 700;
+            font-weight: 800;
             color: {TEXT};
         }}
 
         #PanelSubtitle, #DialogSubtitle, #CompactSubtitle {{
             color: {TEXT_MUTED};
-            font-size: 12px;
+            font-size: 11px;
         }}
 
         #CompactTitle, #ToolbarLabel {{
@@ -122,7 +127,7 @@ def main_qss() -> str:
         }}
 
         #H1 {{
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 800;
             color: {TEXT};
         }}
@@ -144,7 +149,7 @@ def main_qss() -> str:
             background: {SURFACE_ALT};
             border: 1px solid {BORDER};
             border-radius: 10px;
-            padding: 10px 12px;
+            padding: 9px 11px;
             color: {TEXT};
             selection-background-color: {SELECTION};
             selection-color: {TEXT};
@@ -175,9 +180,9 @@ def main_qss() -> str:
 
         #Chip {{
             background: {SURFACE_ALT};
-            border: 1px solid {BORDER};
+            border: 1px solid {PANEL_EDGE};
             border-radius: 10px;
-            padding: 10px 12px;
+            padding: 9px 11px;
             color: {TEXT_MUTED};
         }}
 
@@ -186,7 +191,7 @@ def main_qss() -> str:
             border: 1px solid {BORDER};
             border-radius: 10px;
             color: {TEXT};
-            padding: 10px 14px;
+            padding: 9px 14px;
             min-height: 18px;
             font-size: 12px;
             font-weight: 600;
@@ -208,15 +213,15 @@ def main_qss() -> str:
         }}
 
         #PrimaryButton {{
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 {ACCENT}, stop:1 {ACCENT_HOVER});
-            border-color: {ACCENT};
+            background: {ACCENT};
+            border-color: {ACCENT_HOVER};
             color: #FFFFFF;
-            min-width: 164px;
+            min-width: 156px;
             font-weight: 700;
         }}
 
         #PrimaryButton:hover {{
+            background: {ACCENT_HOVER};
             border-color: {ACCENT_HOVER};
         }}
 
@@ -271,7 +276,7 @@ def main_qss() -> str:
 
         QTextEdit#ConsoleArea {{
             background: {SURFACE_ALT};
-            border: 1px solid {BORDER};
+            border: 1px solid {PANEL_EDGE};
             border-radius: 10px;
             padding: 10px 12px;
             color: {TEXT};
@@ -281,9 +286,9 @@ def main_qss() -> str:
 
         QTableWidget#QueueTable {{
             background: {SURFACE};
-            alternate-background-color: {SURFACE_ALT};
+            alternate-background-color: {SURFACE_ELEVATED};
             color: {TEXT};
-            border: 1px solid {BORDER};
+            border: 1px solid {PANEL_EDGE};
             border-radius: 12px;
             gridline-color: {BORDER};
             selection-background-color: {SELECTION};
@@ -292,7 +297,7 @@ def main_qss() -> str:
         }}
 
         QTableWidget#QueueTable::item {{
-            padding: 6px 10px;
+            padding: 5px 10px;
             border-bottom: 1px solid {BORDER};
         }}
 
@@ -301,19 +306,19 @@ def main_qss() -> str:
         }}
 
         QTableWidget#QueueTable QHeaderView::section {{
-            background: {SURFACE_ALT};
-            color: {TEXT_MUTED};
+            background: {SURFACE_ELEVATED};
+            color: {TEXT};
             padding: 9px 8px;
             border: none;
-            border-bottom: 1px solid {BORDER};
+            border-bottom: 1px solid {PANEL_EDGE};
             font-weight: 700;
             font-size: 11px;
         }}
 
         QTableWidget#QueueTable QTableCornerButton::section {{
-            background: {SURFACE_ALT};
+            background: {SURFACE_ELEVATED};
             border: none;
-            border-bottom: 1px solid {BORDER};
+            border-bottom: 1px solid {PANEL_EDGE};
         }}
 
         #NowDownloadingCard {{
@@ -327,7 +332,7 @@ def main_qss() -> str:
             color: {WARNING};
             border: 1px solid rgba(210,163,74,0.20);
             border-radius: 10px;
-            padding: 2px 8px;
+            padding: 1px 7px;
             font-size: 10px;
             font-weight: 700;
         }}
