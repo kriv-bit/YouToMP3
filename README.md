@@ -41,7 +41,7 @@ The project focuses on a polished desktop workflow with real operational feature
 
 ![Queue View](docs/screenshot-queue.png)
 
-### Playlist Processing
+### Playlist Dialog
 
 ![Playlist Workflow](docs/screenshot-playlist.png)
 
@@ -254,21 +254,6 @@ This project was built as a portfolio-grade desktop application that goes beyond
 - maintainable separation between UI, controller logic, workers, and download services
 
 For a portfolio, it is valuable because it combines product thinking, native desktop UI work, threading, media tooling, and packaging into one cohesive project.
-
-## Roadmap
-
-Potential future improvements include:
-
-- download cancellation support
-- retry controls for failed items
-- richer output format options
-- drag-and-drop URL input
-- persistent download history
-- per-item quality overrides
-- better error surfacing and diagnostics
-- automated tests around queue behavior and worker flows
-- packaged releases and installer generation
-- optional dark/light theme variants
 
 ## License
 
