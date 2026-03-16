@@ -234,9 +234,8 @@ YtoMp3/
 ```
 ## Download
 
-Download the Windows build from the assets section of this release:
-
-YouToMp3-Pro-windows-v1.0.0.zip
+⬇ Download the Windows build from the assets section of this release:
+https://github.com/kriv-bit/YouToMP3/releases/latest
 
 After downloading:
 
