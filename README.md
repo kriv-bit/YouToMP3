@@ -12,6 +12,7 @@ A PySide6 desktop YouTube audio downloader with queue management, embedded metad
 ## Download
 
 Download the Windows build from the assets section of this release:
+
 https://github.com/kriv-bit/YouToMP3/releases/latest
 
 After downloading:
