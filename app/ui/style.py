@@ -225,6 +225,12 @@ def main_qss() -> str:
             border-color: {ACCENT_HOVER};
         }}
 
+        #PrimaryButton:disabled {{
+            background: {SURFACE_ELEVATED};
+            border-color: {BORDER};
+            color: {TEXT_FAINT};
+        }}
+
         #SecondaryButton {{
             background: {SURFACE_ELEVATED};
             border-color: {BORDER};
@@ -413,6 +419,10 @@ def main_qss() -> str:
 
         QToolButton#RowDeleteButton:hover {{
             color: {DANGER};
+        }}
+
+        QToolButton#RowDeleteButton:disabled {{
+            color: {TEXT_FAINT};
         }}
 
         QScrollBar:vertical {{

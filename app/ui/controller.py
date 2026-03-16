@@ -6,12 +6,12 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 from PySide6.QtCore import QThread, QUrl
 from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
 from app.ui.dialogs import AddSongDialog, AddPlaylistDialog, PasteBatchDialog
-from app.ui.worker import DownloadWorker
+from app.ui.worker import DownloadWorker, PlaylistExpandWorker, QueueMetadataWorker
 from app.ui.widgets import set_elided
 
 if TYPE_CHECKING:
@@ -26,6 +26,8 @@ class MainController:
 
     def __init__(self, win: MainWindow):
         self.win = win
+        if not hasattr(self.win, "background_jobs"):
+            self.win.background_jobs = []
 
     # ---- helpers ----
 
@@ -37,6 +39,55 @@ class MainController:
 
     def _settings_set(self, key: str, value):
         self.win._settings_set(key, value)
+
+    def _register_background_job(self, thread: QThread, worker: object):
+        job = (thread, worker)
+        self.win.background_jobs.append(job)
+        return job
+
+    def _release_background_job(self, job):
+        if job in self.win.background_jobs:
+            self.win.background_jobs.remove(job)
+
+    def _set_download_active(self, active: bool):
+        self.win.download_active = active
+        self.win.download_btn.setEnabled(not active)
+        self.win.download_btn.setText(self._t("downloading") if active else self._t("download"))
+
+    def _start_metadata_lookup(self, jobs: list[tuple[str, str]]):
+        if not jobs:
+            return
+
+        thread = QThread(self.win)
+        worker = QueueMetadataWorker(self.win.downloader, jobs)
+        worker.moveToThread(thread)
+
+        job = self._register_background_job(thread, worker)
+        thread.started.connect(worker.run)
+        worker.item_resolved.connect(self.on_queue_item_resolved)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._release_background_job(job))
+        thread.start()
+
+    def _start_playlist_expansion(self, playlist_url: str, fmt: str, limit: int):
+        self.win.add_log(self._t("expanding_playlist"))
+
+        thread = QThread(self.win)
+        worker = PlaylistExpandWorker(self.win.downloader, playlist_url, fmt, limit=limit)
+        worker.moveToThread(thread)
+
+        job = self._register_background_job(thread, worker)
+        thread.started.connect(worker.run)
+        worker.item_found.connect(self.on_playlist_item_found)
+        worker.error.connect(self.on_playlist_expand_error)
+        worker.finished.connect(self.on_playlist_expand_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._release_background_job(job))
+        thread.start()
 
     # ---- folder actions ----
 
@@ -87,10 +138,15 @@ class MainController:
             return
 
         fmt = self.win.format_box.currentText()
-        self.win.queue.add_row(
-            url=url, fmt=fmt, status_key="queued", pct=0,
+        row_id = self.win.queue.add_row(
+            url=url,
+            fmt=fmt,
+            title=self._t("resolving_title"),
+            status_key="queued",
+            pct=0,
             settings_set_fn=self._settings_set,
         )
+        self._start_metadata_lookup([(row_id, url)])
 
     def open_add_playlist_dialog(self):
         """Show the Add Playlist modal; optionally expand to individual videos."""
@@ -107,31 +163,18 @@ class MainController:
         fmt = self.win.format_box.currentText()
 
         if not data.get("expand", True):
-            self.win.queue.add_row(
-                url=url, fmt=fmt, status_key="queued", pct=0,
+            row_id = self.win.queue.add_row(
+                url=url,
+                fmt=fmt,
+                title=self._t("resolving_title"),
+                status_key="queued",
+                pct=0,
                 settings_set_fn=self._settings_set,
             )
+            self._start_metadata_lookup([(row_id, url)])
             return
 
-        # Expand now
-        self.win.add_log(self._t("expanding_playlist"))
-        try:
-            urls = self.expand_playlist_to_urls(url, limit=data.get("limit", 200))
-        except Exception as e:
-            QMessageBox.warning(self.win, self._t("error_title"), str(e))
-            return
-
-        if not urls:
-            QMessageBox.warning(self.win, self._t("error_title"), self._t("playlist_no_items"))
-            return
-
-        for u in urls:
-            self.win.queue.add_row(
-                url=u, fmt=fmt, status_key="queued", pct=0,
-                auto_save=False,
-            )
-        self.win.queue.save(self._settings_set)
-        self.win.add_log(self._tf("playlist_items_added", count=len(urls)))
+        self._start_playlist_expansion(url, fmt, data.get("limit", 200))
 
     def open_paste_batch_dialog(self):
         """Show the Paste Batch modal and enqueue all entered URLs."""
@@ -145,18 +188,25 @@ class MainController:
             return
 
         fmt = self.win.format_box.currentText()
+        jobs: list[tuple[str, str]] = []
         for u in urls:
-            self.win.queue.add_row(
-                url=u, fmt=fmt, status_key="queued", pct=0,
+            row_id = self.win.queue.add_row(
+                url=u,
+                fmt=fmt,
+                title=self._t("resolving_title"),
+                status_key="queued",
+                pct=0,
                 auto_save=False,
             )
+            jobs.append((row_id, u))
         self.win.queue.save(self._settings_set)
+        self._start_metadata_lookup(jobs)
 
     # ---- playlist expansion ----
 
     def expand_playlist_to_urls(self, playlist_url: str, limit: int = 200) -> list[str]:
         """Expand a playlist URL into a deduplicated list of watch URLs."""
-        info = self.win.downloader.get_info(playlist_url)
+        info = self.win.downloader.get_info(playlist_url, allow_playlist=True)
 
         entries = info.get("entries") if isinstance(info, dict) else None
         if not entries:
@@ -190,6 +240,9 @@ class MainController:
 
     def start_download(self):
         """Start downloading all queued items via a background QThread."""
+        if self.win.download_active:
+            return
+
         queued = self.win.queue.get_queued_rows(
             fallback_fmt=self.win.format_box.currentText(),
         )
@@ -197,18 +250,18 @@ class MainController:
             QMessageBox.warning(self.win, self._t("no_urls_title"), self._t("no_queued_body"))
             return
 
-        urls = [u for (_r, u, _f) in queued]
+        items = [(row_id, url) for (row_id, url, _fmt) in queued]
         fmt = self.win.format_box.currentText()
         q = self.win.quality_box.currentText()
 
-        self.win.download_btn.setEnabled(False)
-        self.win.download_btn.setText(self._t("downloading"))
+        self._set_download_active(True)
         self.set_status("downloading")
         self.win.progress_bar.setValue(0)
+        self.win.queue.set_active_row(None)
 
         # Thread + worker
-        self.win.thread = QThread()
-        self.win.worker = DownloadWorker(self.win.downloader, urls, fmt, q)
+        self.win.thread = QThread(self.win)
+        self.win.worker = DownloadWorker(self.win.downloader, items, fmt, q)
         self.win.worker.moveToThread(self.win.thread)
 
         self.win.thread.started.connect(self.win.worker.run)
@@ -245,16 +298,53 @@ class MainController:
         if key == "now_downloading":
             self.win.now_label.setText(self._tf(key, **args))
 
-    def on_item_update(self, row: int, status_key: str, pct: int, title: str, out_file: str):
+    def on_queue_item_resolved(self, row_id: str, title: str, thumbnail_data: object):
+        """Apply metadata results coming from a background queue lookup."""
+        self.win.queue.update_metadata(
+            row_id,
+            title=title,
+            thumbnail_data=thumbnail_data if isinstance(thumbnail_data, (bytes, bytearray)) else None,
+            settings_set_fn=self._settings_set,
+        )
+
+    def on_playlist_item_found(self, fmt: str, url: str, title: str, thumbnail_data: object):
+        """Add playlist entries progressively from the expansion worker."""
+        row_id = self.win.queue.add_row(
+            url=url,
+            fmt=fmt,
+            title=title or self._t("resolving_title"),
+            status_key="queued",
+            pct=0,
+            auto_save=False,
+            thumbnail_data=thumbnail_data if isinstance(thumbnail_data, (bytes, bytearray)) else None,
+        )
+        if not title or not thumbnail_data:
+            self._start_metadata_lookup([(row_id, url)])
+
+    def on_playlist_expand_error(self, message: str):
+        QMessageBox.warning(self.win, self._t("error_title"), message)
+
+    def on_playlist_expand_finished(self, count: int):
+        if count < 0:
+            return
+        if count == 0:
+            QMessageBox.warning(self.win, self._t("error_title"), self._t("playlist_no_items"))
+            return
+        self.win.queue.save(self._settings_set)
+        self.win.add_log(self._tf("playlist_items_added", count=count))
+
+    def on_item_update(self, row_id: str, status_key: str, pct: int, title: str, out_file: str):
         """Route a Worker item_update signal to the queue manager."""
+        if status_key == "downloading":
+            self.win.queue.set_active_row(row_id)
         self.win.queue.update_item(
-            row, status_key, pct, title, out_file,
+            row_id, status_key, pct, title, out_file,
             settings_set_fn=self._settings_set,
         )
 
     def on_worker_finished(self):
         """Re-enable UI after the download thread finishes."""
-        self.win.download_btn.setEnabled(True)
-        self.win.download_btn.setText(self._t("download"))
+        self._set_download_active(False)
         self.set_status("idle")
+        self.win.queue.set_active_row(None)
         self.win.now_card.clear()

@@ -31,6 +31,15 @@ class MediaDownloader:
     def __init__(self, output_path: str = "downloads"):
         self.output_path = output_path
 
+    def _result_with_extension(self, result: dict, ext: str) -> dict:
+        """Normalize yt-dlp output to a consistent {title, filepath} payload."""
+        base_path = result.get("base_path", "")
+        final_path = str(Path(base_path).with_suffix(f".{ext}")) if base_path else ""
+        return {
+            "title": result.get("info", {}).get("title", ""),
+            "filepath": final_path,
+        }
+
     def _base_opts(self, progress_callback=None) -> dict:
         out_dir = Path(self.output_path)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -87,9 +96,7 @@ class MediaDownloader:
                 "verbose": True,
             }
             r = self._try_download_with_fallback(url, opts)
-            base_path = r.get("base_path", "")
-            final_path = str(Path(base_path).with_suffix(".mp3")) if base_path else ""
-            return {"title": r.get("info", {}).get("title", ""), "filepath": final_path}
+            return self._result_with_extension(r, "mp3")
 
         elif format_type == "m4a":
             opts = {
@@ -103,7 +110,8 @@ class MediaDownloader:
                     {"key": "EmbedThumbnail"}
                 ],
             }
-            self._try_download_with_fallback(url, opts)
+            r = self._try_download_with_fallback(url, opts)
+            return self._result_with_extension(r, "m4a")
 
         elif format_type == "wav":
             opts = {
@@ -114,7 +122,8 @@ class MediaDownloader:
                     {"key": "FFmpegMetadata"},
                 ],
             }
-            self._try_download_with_fallback(url, opts)
+            r = self._try_download_with_fallback(url, opts)
+            return self._result_with_extension(r, "wav")
 
         elif format_type == "mp4":
             opts = {
@@ -124,13 +133,12 @@ class MediaDownloader:
                 "postprocessors": [{"key": "FFmpegMetadata"}],
             }
             r = self._try_download_with_fallback(url, opts)
-            base_path = r.get("base_path", "")
-            final_path = str(Path(base_path).with_suffix(".mp4")) if base_path else ""
-            return {"title": r.get("info", {}).get("title", ""), "filepath": final_path}
+            return self._result_with_extension(r, "mp4")
 
         else:
             raise ValueError(f"Unsupported format_type: {format_type}")
-    def get_info(self, url: str) -> dict:
+
+    def get_info(self, url: str, *, allow_playlist: bool = False) -> dict:
         """Fetch metadata without downloading."""
         base = self._base_opts(progress_callback=None)
         base.update({
@@ -138,6 +146,7 @@ class MediaDownloader:
             "quiet": True,
             "no_warnings": True,
             "color": "never",
+            "noplaylist": not allow_playlist,
         })
         with YoutubeDL(base) as ydl:
             return ydl.extract_info(url, download=False)

@@ -3,7 +3,7 @@
 
 import os
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -47,6 +47,8 @@ class MainWindow(QMainWindow):
 
         self.thread = None
         self.worker = None
+        self.download_active = False
+        self.background_jobs = []
 
         self.setWindowTitle(TRANSLATIONS[self.lang]["app_name"])
         self.setMinimumSize(1120, 720)
@@ -63,6 +65,8 @@ class MainWindow(QMainWindow):
 
         self.queue = QueueManager(self.queue_table, t_fn=self._t)
         self.ctrl = MainController(self)
+        self.queue.set_can_modify_fn(lambda: not self.download_active)
+        self.queue.set_settings_set_fn(self._settings_set)
 
         self.apply_language(self.lang)
         self.settings.restore_geometry(self)
@@ -418,10 +422,11 @@ class MainWindow(QMainWindow):
             self._t("col_format"),
             self._t("col_status"),
             self._t("col_progress"),
-            self._t("col_output"),
+            self._t("col_cover"),
             "",
         ])
         self.queue_table.verticalHeader().setDefaultSectionSize(72)
+        self.queue_table.setIconSize(QSize(72, 40))
 
         header = self.queue_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -429,8 +434,9 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.Fixed)
         header.setSectionResizeMode(6, QHeaderView.Fixed)
+        self.queue_table.setColumnWidth(5, 96)
         self.queue_table.setColumnWidth(6, 36)
 
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
