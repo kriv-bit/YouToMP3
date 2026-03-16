@@ -33,8 +33,6 @@ The project focuses on a polished desktop workflow with real operational feature
 
 ## Screenshots
 
-> Replace these placeholders with real screenshots before publishing.
-
 ### Main Window
 
 ![Main Window](docs/screenshot-main.png)
