@@ -232,7 +232,18 @@ YtoMp3/
 ├── LICENSE
 └── test_download.py
 ```
+## Download
 
+Download the Windows build from the assets section of this release:
+
+YouToMp3-Pro-windows-v1.0.0.zip
+
+After downloading:
+
+1. Extract the zip file
+2. Open the extracted folder
+3. Run YouToMp3-Pro.exe
+   
 ## Technologies Used
 
 - **Python** for the application logic
