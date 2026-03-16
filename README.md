@@ -9,6 +9,18 @@ A PySide6 desktop YouTube audio downloader with queue management, embedded metad
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-0A7F5A)](#)
 
+## Download
+
+⬇ Download the Windows build from the assets section of this release:
+https://github.com/kriv-bit/YouToMP3/releases/latest
+
+After downloading:
+
+1. Extract the zip file
+2. Open the extracted folder
+3. Make sure you have FFmpeg installed
+4. Run YouToMp3-Pro.exe
+   
 ## Overview
 
 YouToMp3 Pro is a desktop application for downloading audio from YouTube and other `yt-dlp` compatible sources through a native PySide6 interface. It is designed as a practical desktop tool rather than a one-off script: you can queue multiple items, add full playlists, monitor live progress, review console logs, and keep the interface responsive while metadata and playlist items are being resolved in the background.
@@ -232,17 +244,7 @@ YtoMp3/
 ├── LICENSE
 └── test_download.py
 ```
-## Download
 
-⬇ Download the Windows build from the assets section of this release:
-https://github.com/kriv-bit/YouToMP3/releases/latest
-
-After downloading:
-
-1. Extract the zip file
-2. Open the extracted folder
-3. Run YouToMp3-Pro.exe
-   
 ## Technologies Used
 
 - **Python** for the application logic
