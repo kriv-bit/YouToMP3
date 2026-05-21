@@ -37,4 +37,10 @@ class AppSettings:
 
     def save_geometry(self, window):
         self.qs.setValue("ui/geometry", window.saveGeometry())
-        
+
+    def get_theme(self) -> str:
+        return self.qs.value("ui/theme", "dark")
+
+    def set_theme(self, theme: str):
+        self.qs.setValue("ui/theme", "light" if theme == "light" else "dark")
+

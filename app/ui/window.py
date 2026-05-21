@@ -3,12 +3,13 @@
 
 import os
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -40,6 +41,7 @@ class MainWindow(QMainWindow):
 
         self.settings = AppSettings()
         self.lang = self.settings.get_language()
+        self.theme = self.settings.get_theme()
         self.output_folder = self.settings.get_output_folder()
 
         self.setWindowIcon(QIcon(os.path.join("assets", "icon.ico")))
@@ -103,6 +105,7 @@ class MainWindow(QMainWindow):
                 widget.setText(self._t(key))
 
         self.lang_label.setText(self._t("language"))
+        self.theme_label.setText(self._t("theme"))
         self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
 
         if self.download_btn.isEnabled():
@@ -121,6 +124,17 @@ class MainWindow(QMainWindow):
             self.expand_queue_btn.setText(self._t("expand_table"))
         if hasattr(self, "clear_queue_btn"):
             self.clear_queue_btn.setText(self._t("clear_queue"))
+
+        # refresh combo item texts so they follow language
+        self._refresh_combo_texts(self.theme_combo, {
+            "dark": self._t("theme_dark"),
+            "light": self._t("theme_light"),
+        })
+
+    def _refresh_combo_texts(self, combo: QComboBox, mapping: dict[str, str]):
+        for i in range(combo.count()):
+            data = combo.itemData(i)
+            combo.setItemText(i, mapping.get(data, combo.itemText(i)))
 
     def _settings_get(self, key: str, default=None):
         s = getattr(self.settings, "qs", self.settings)
@@ -151,6 +165,11 @@ class MainWindow(QMainWindow):
         self.lang_combo.blockSignals(True)
         self.lang_combo.setCurrentIndex(idx)
         self.lang_combo.blockSignals(False)
+
+        t_idx = 0 if self.theme == "dark" else 1
+        self.theme_combo.blockSignals(True)
+        self.theme_combo.setCurrentIndex(t_idx)
+        self.theme_combo.blockSignals(False)
 
     def _build_sidebar(self):
         self.sidebar = QFrame()
@@ -314,6 +333,26 @@ class MainWindow(QMainWindow):
         lang_layout.addWidget(self.lang_combo)
 
         top.addWidget(lang_wrap)
+
+        theme_wrap = QFrame()
+        theme_wrap.setObjectName("InlinePanel")
+        theme_layout = QHBoxLayout(theme_wrap)
+        theme_layout.setContentsMargins(12, 8, 12, 8)
+        theme_layout.setSpacing(8)
+
+        self.theme_label = QLabel()
+        self.theme_label.setObjectName("ThemeLabel")
+        theme_layout.addWidget(self.theme_label)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Dark", "dark")
+        self.theme_combo.addItem("Light", "light")
+        self.theme_combo.setObjectName("ThemeCombo")
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_change)
+        theme_layout.addWidget(self.theme_combo)
+
+        top.addWidget(theme_wrap)
+
         header_layout.addLayout(top)
 
         actions = QHBoxLayout()
@@ -336,6 +375,14 @@ class MainWindow(QMainWindow):
         self.now_label = QLabel("")
         self.now_label.setObjectName("NowLabel")
         content_layout.addWidget(self.now_label)
+
+        # subtle fade animation for now_label text changes
+        self._now_label_effect = QGraphicsOpacityEffect(self.now_label)
+        self._now_label_effect.setOpacity(1.0)
+        self.now_label.setGraphicsEffect(self._now_label_effect)
+        self._now_label_anim = QPropertyAnimation(self._now_label_effect, b"opacity", self)
+        self._now_label_anim.setDuration(180)
+        self._now_label_anim.setEasingCurve(QEasingCurve.OutCubic)
 
         body_splitter = QSplitter(Qt.Horizontal)
         body_splitter.setChildrenCollapsible(False)
@@ -407,7 +454,6 @@ class MainWindow(QMainWindow):
         queue_bar_layout = QHBoxLayout(queue_bar)
         queue_bar_layout.setContentsMargins(4, 4, 4, 4)
         queue_bar_layout.setSpacing(8)
-
 
         self.clear_queue_btn = QPushButton()
         self._bind_text(self.clear_queue_btn, "clear_queue")
@@ -524,7 +570,17 @@ class MainWindow(QMainWindow):
         self.queue.clear(settings_set_fn=self._settings_set, parent=self, confirm=True)
 
     def apply_style(self):
-        self.setStyleSheet(main_qss())
+        self.setStyleSheet(main_qss(self.theme))
+
+    def set_now_label(self, text: str):
+        if self.now_label.text() == text:
+            return
+        self._now_label_anim.stop()
+        self.now_label.setText(text)
+        self._now_label_effect.setOpacity(0.0)
+        self._now_label_anim.setStartValue(0.0)
+        self._now_label_anim.setEndValue(1.0)
+        self._now_label_anim.start()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -536,6 +592,18 @@ class MainWindow(QMainWindow):
             self.lang = "es" if lang == "es" else "en"
             return
         self.apply_language(self.lang_combo.currentData())
+
+    def _on_theme_change(self):
+        new_theme = self.theme_combo.currentData()
+        if new_theme == self.theme:
+            return
+        self.theme = new_theme
+        self.settings.set_theme(self.theme)
+        self.apply_style()
+        if hasattr(self, "queue"):
+            self.queue.set_theme(self.theme)
+        if hasattr(self, "now_card"):
+            self.now_card.set_theme(self.theme)
 
     def _on_format_change(self, fmt: str):
         self.settings.set_format(fmt)

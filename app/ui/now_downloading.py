@@ -5,10 +5,12 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QUrl
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPixmap
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QVBoxLayout
+
+from app.ui.style import nd_placeholder_colors
 
 
 class NowDownloadingCard(QFrame):
@@ -22,8 +24,10 @@ class NowDownloadingCard(QFrame):
         self._t = t_fn
         self._nam = QNetworkAccessManager(self)
         self._nam.finished.connect(self._on_thumb_loaded)
+        self._theme = "dark"
 
         self._build()
+        self._setup_cover_fade()
         self.clear()
 
     def set_t(self, t_fn: Callable[[str], str]):
@@ -31,6 +35,11 @@ class NowDownloadingCard(QFrame):
         self._section_label.setText(self._t("now_downloading_title"))
         if not self._has_item:
             self._placeholder.setText(self._t("nd_no_item"))
+
+    def set_theme(self, theme: str):
+        self._theme = theme
+        if not self._has_item:
+            self._set_placeholder_cover()
 
     def update_meta(
         self,
@@ -78,6 +87,8 @@ class NowDownloadingCard(QFrame):
         self._placeholder.setText(self._t("nd_no_item"))
         self._placeholder.show()
         self._set_placeholder_cover()
+        self._cover_anim.stop()
+        self._cover_effect.setOpacity(1.0)
 
     def _build(self):
         main_lay = QVBoxLayout(self)
@@ -149,21 +160,32 @@ class NowDownloadingCard(QFrame):
         self._placeholder.setAlignment(Qt.AlignCenter)
         main_lay.addWidget(self._placeholder)
 
+    def _setup_cover_fade(self):
+        self._cover_effect = QGraphicsOpacityEffect(self._cover)
+        self._cover_effect.setOpacity(1.0)
+        self._cover.setGraphicsEffect(self._cover_effect)
+
+        self._cover_anim = QPropertyAnimation(self._cover_effect, b"opacity", self)
+        self._cover_anim.setDuration(250)
+        self._cover_anim.setEasingCurve(QEasingCurve.OutCubic)
+
     def _set_placeholder_cover(self):
+        pen, grad_start, grad_end, note = nd_placeholder_colors(self._theme)
         px = QPixmap(self.COVER_SIZE, self.COVER_SIZE)
         px.fill(QColor(0, 0, 0, 0))
         painter = QPainter(px)
         grad = QLinearGradient(0, 0, self.COVER_SIZE, self.COVER_SIZE)
-        grad.setColorAt(0.0, QColor("#1F2C3B"))
-        grad.setColorAt(1.0, QColor("#14202C"))
+        grad.setColorAt(0.0, QColor(grad_start))
+        grad.setColorAt(1.0, QColor(grad_end))
         painter.setBrush(grad)
-        painter.setPen(QColor("#344356"))
+        painter.setPen(QColor(pen))
         painter.drawRoundedRect(0, 0, self.COVER_SIZE - 1, self.COVER_SIZE - 1, 12, 12)
-        painter.setPen(QColor("#7E8B9A"))
+        painter.setPen(QColor(note))
         painter.setFont(QFont("Segoe UI Symbol", 26))
         painter.drawText(px.rect(), Qt.AlignCenter, "\u266a")
         painter.end()
         self._cover.setPixmap(px)
+        self._cover_effect.setOpacity(1.0)
 
     def _on_thumb_loaded(self, reply: QNetworkReply):
         if reply.error() != QNetworkReply.NoError:
@@ -183,7 +205,11 @@ class NowDownloadingCard(QFrame):
                 x = (scaled.width() - self.COVER_SIZE) // 2
                 y = (scaled.height() - self.COVER_SIZE) // 2
                 scaled = scaled.copy(x, y, self.COVER_SIZE, self.COVER_SIZE)
+            self._cover_effect.setOpacity(0.0)
             self._cover.setPixmap(scaled)
+            self._cover_anim.setStartValue(0.0)
+            self._cover_anim.setEndValue(1.0)
+            self._cover_anim.start()
         else:
             self._set_placeholder_cover()
 

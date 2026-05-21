@@ -92,6 +92,9 @@ TRANSLATIONS = {
         "console_panel_subtitle": "Operational feedback and errors.",
         "queue_panel_title": "Downloads queue",
         "queue_panel_subtitle": "Status, progress and output paths.",
+        "theme": "Theme",
+        "theme_dark": "Dark",
+        "theme_light": "Light",
         "error_title": "Error",
     },
     "es": {
@@ -185,6 +188,9 @@ TRANSLATIONS = {
         "console_panel_subtitle": "Eventos y errores.",
         "queue_panel_title": "Cola de descargas",
         "queue_panel_subtitle": "Estado, progreso y archivos.",
+        "theme": "Tema",
+        "theme_dark": "Oscuro",
+        "theme_light": "Claro",
         "error_title": "Error",
     },
 }

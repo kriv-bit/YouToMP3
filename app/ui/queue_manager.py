@@ -21,20 +21,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-
-STATUS_COLORS = {
-    "queued": (QColor("#9DA9B8"), QColor("#18222D")),
-    "downloading": (QColor("#D9A441"), QColor("#282316")),
-    "done": (QColor("#4EBB78"), QColor("#18251C")),
-    "error": (QColor("#D86C6C"), QColor("#281B1B")),
-    "cancelled": (QColor("#7E8B9A"), QColor("#1A2028")),
-}
+from app.ui.style import status_colors, queue_placeholder_colors
 
 ROW_ID_ROLE = int(Qt.UserRole) + 10
 OUTPUT_ROLE = int(Qt.UserRole) + 11
 THUMBNAIL_URL_ROLE = int(Qt.UserRole) + 12
 UPLOADER_ROLE = int(Qt.UserRole) + 13
 DURATION_ROLE = int(Qt.UserRole) + 14
+IS_PLACEHOLDER_ROLE = int(Qt.UserRole) + 20
 
 
 class QueueManager:
@@ -46,6 +40,7 @@ class QueueManager:
         self._can_modify_fn: Callable[[], bool] | None = None
         self._settings_set_fn: Callable | None = None
         self._active_row_id: str | None = None
+        self._theme = "dark"
         self._placeholder_icon = self._build_placeholder_icon()
 
     def set_t(self, t_fn: Callable[[str], str]):
@@ -62,6 +57,25 @@ class QueueManager:
 
     def set_settings_set_fn(self, fn: Callable | None):
         self._settings_set_fn = fn
+
+    def set_theme(self, theme: str):
+        self._theme = theme
+        self._placeholder_icon = self._build_placeholder_icon()
+        for row in range(self._table.rowCount()):
+            self._refresh_row_visuals(row)
+
+    def _refresh_row_visuals(self, row: int):
+        # Status + progress colors
+        status_item = self._table.item(row, 3)
+        if status_item:
+            status_key = status_item.data(Qt.UserRole) or "queued"
+            self._set_status_cell(row, status_key)
+            self._set_progress_cell(row, self._table.item(row, 4).data(Qt.UserRole) or 0)
+
+        # Thumbnail placeholder refresh
+        thumb_item = self._table.item(row, 5)
+        if thumb_item and thumb_item.data(IS_PLACEHOLDER_ROLE):
+            self._set_thumbnail_cell(row, row_id=self._row_id_for_row(row))
 
     def refresh_headers(self):
         self._table.setHorizontalHeaderLabels(
@@ -348,6 +362,7 @@ class QueueManager:
                 dst.setData(THUMBNAIL_URL_ROLE, src.data(THUMBNAIL_URL_ROLE))
                 dst.setData(UPLOADER_ROLE, src.data(UPLOADER_ROLE))
                 dst.setData(DURATION_ROLE, src.data(DURATION_ROLE))
+                dst.setData(IS_PLACEHOLDER_ROLE, src.data(IS_PLACEHOLDER_ROLE))
                 dst.setForeground(src.foreground())
                 dst.setBackground(src.background())
                 dst.setToolTip(src.toolTip())
@@ -515,7 +530,7 @@ class QueueManager:
         }
         item.setText(status_map.get(status_key, status_key))
 
-        fg, bg = STATUS_COLORS.get(status_key, STATUS_COLORS["queued"])
+        fg, bg = status_colors(self._theme).get(status_key, status_colors(self._theme)["queued"])
         item.setForeground(fg)
         item.setBackground(bg)
 
@@ -537,7 +552,7 @@ class QueueManager:
         status_item = self._table.item(row, 3)
         if status_item:
             status_key = status_item.data(Qt.UserRole) or "queued"
-            fg, bg = STATUS_COLORS.get(status_key, STATUS_COLORS["queued"])
+            fg, bg = status_colors(self._theme).get(status_key, status_colors(self._theme)["queued"])
             item.setForeground(fg)
             item.setBackground(bg)
 
@@ -569,6 +584,7 @@ class QueueManager:
             icon = self._placeholder_icon
         embedded_cover = None if thumbnail_data else self._cover_data_from_output(current_output)
         cover_data = thumbnail_data or embedded_cover
+        is_placeholder = cover_data is None
         if cover_data:
             pixmap = QPixmap()
             if pixmap.loadFromData(cover_data):
@@ -582,7 +598,9 @@ class QueueManager:
                     y = max(0, (scaled.height() - 40) // 2)
                     scaled = scaled.copy(x, y, 72, 40)
                 icon = QIcon(scaled)
+                is_placeholder = False
         item.setIcon(icon)
+        item.setData(IS_PLACEHOLDER_ROLE, is_placeholder)
 
     def _output_tooltip(self, out_file: str) -> str:
         if not out_file:
@@ -593,15 +611,16 @@ class QueueManager:
             return out_file
 
     def _build_placeholder_icon(self) -> QIcon:
+        pen, brush, tri = queue_placeholder_colors(self._theme)
         pixmap = QPixmap(72, 40)
         pixmap.fill(Qt.transparent)
 
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QColor("#3B4A5E"))
-        painter.setBrush(QColor("#18222D"))
+        painter.setPen(QColor(pen))
+        painter.setBrush(QColor(brush))
         painter.drawRoundedRect(0, 0, 71, 39, 8, 8)
-        painter.setBrush(QColor("#7C8898"))
+        painter.setBrush(QColor(tri))
         painter.setPen(Qt.NoPen)
         painter.drawPolygon(QPolygon([QPoint(29, 12), QPoint(29, 28), QPoint(45, 20)]))
         painter.end()

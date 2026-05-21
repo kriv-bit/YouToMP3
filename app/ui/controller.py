@@ -299,7 +299,7 @@ class MainController(QObject):
 
         self.win.add_log(self._tf(key, **args))
         if key == "now_downloading":
-            self.win.now_label.setText(self._tf(key, **args))
+            self.win.set_now_label(self._tf(key, **args))
 
     @Slot(str, str, object)
     def on_queue_item_resolved(self, row_id: str, title: str, metadata: object):
