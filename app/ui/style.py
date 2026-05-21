@@ -241,6 +241,17 @@ def main_qss() -> str:
             background: {SURFACE};
         }}
 
+        #DangerButton {{
+            background: {SURFACE_ELEVATED};
+            border-color: rgba(216,109,109,0.35);
+            color: {DANGER};
+        }}
+
+        #DangerButton:hover {{
+            background: {DANGER_SOFT};
+            border-color: {DANGER};
+        }}
+
         QProgressBar#Progress {{
             background: {SURFACE_ALT};
             border: 1px solid {BORDER};

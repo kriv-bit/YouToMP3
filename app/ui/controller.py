@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QThread, QUrl
+from PySide6.QtCore import QObject, QThread, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
@@ -18,13 +18,14 @@ if TYPE_CHECKING:
     from app.ui.window import MainWindow
 
 
-class MainController:
+class MainController(QObject):
     """Mediates between MainWindow widgets and business logic.
 
     Holds a reference to the window to read/write widget state.
     """
 
     def __init__(self, win: MainWindow):
+        super().__init__(win)
         self.win = win
         if not hasattr(self.win, "background_jobs"):
             self.win.background_jobs = []
@@ -111,6 +112,7 @@ class MainController:
 
     # ---- status ----
 
+    @Slot(str)
     def set_status(self, key: str):
         """Update the sidebar status label."""
         self.win.status_key = key
@@ -250,7 +252,7 @@ class MainController:
             QMessageBox.warning(self.win, self._t("no_urls_title"), self._t("no_queued_body"))
             return
 
-        items = [(row_id, url) for (row_id, url, _fmt) in queued]
+        items = queued
         fmt = self.win.format_box.currentText()
         q = self.win.quality_box.currentText()
 
@@ -276,6 +278,7 @@ class MainController:
 
         self.win.thread.start()
 
+    @Slot(object)
     def on_log_event(self, event: object):
         """Route a Worker log_event signal to the console, now_label, and card."""
         key = event.get("key", "ready")
@@ -298,32 +301,45 @@ class MainController:
         if key == "now_downloading":
             self.win.now_label.setText(self._tf(key, **args))
 
-    def on_queue_item_resolved(self, row_id: str, title: str, thumbnail_data: object):
+    @Slot(str, str, object)
+    def on_queue_item_resolved(self, row_id: str, title: str, metadata: object):
         """Apply metadata results coming from a background queue lookup."""
+        payload = metadata if isinstance(metadata, dict) else {}
+        thumbnail_data = payload.get("thumbnail_data")
         self.win.queue.update_metadata(
             row_id,
-            title=title,
+            title=payload.get("title") or title,
             thumbnail_data=thumbnail_data if isinstance(thumbnail_data, (bytes, bytearray)) else None,
-            settings_set_fn=self._settings_set,
+            thumbnail_url=payload.get("thumbnail") or "",
+            uploader=payload.get("uploader") or "",
+            duration=payload.get("duration"),
         )
 
-    def on_playlist_item_found(self, fmt: str, url: str, title: str, thumbnail_data: object):
+    @Slot(str, str, str, object)
+    def on_playlist_item_found(self, fmt: str, url: str, title: str, metadata: object):
         """Add playlist entries progressively from the expansion worker."""
+        payload = metadata if isinstance(metadata, dict) else {}
+        thumbnail_data = payload.get("thumbnail_data")
         row_id = self.win.queue.add_row(
             url=url,
             fmt=fmt,
-            title=title or self._t("resolving_title"),
+            title=payload.get("title") or title or self._t("resolving_title"),
             status_key="queued",
             pct=0,
             auto_save=False,
             thumbnail_data=thumbnail_data if isinstance(thumbnail_data, (bytes, bytearray)) else None,
+            thumbnail_url=payload.get("thumbnail") or "",
+            uploader=payload.get("uploader") or "",
+            duration=payload.get("duration"),
         )
         if not title or not thumbnail_data:
             self._start_metadata_lookup([(row_id, url)])
 
+    @Slot(str)
     def on_playlist_expand_error(self, message: str):
         QMessageBox.warning(self.win, self._t("error_title"), message)
 
+    @Slot(int)
     def on_playlist_expand_finished(self, count: int):
         if count < 0:
             return
@@ -333,6 +349,7 @@ class MainController:
         self.win.queue.save(self._settings_set)
         self.win.add_log(self._tf("playlist_items_added", count=count))
 
+    @Slot(str, str, int, str, str)
     def on_item_update(self, row_id: str, status_key: str, pct: int, title: str, out_file: str):
         """Route a Worker item_update signal to the queue manager."""
         if status_key == "downloading":
@@ -342,6 +359,7 @@ class MainController:
             settings_set_fn=self._settings_set,
         )
 
+    @Slot()
     def on_worker_finished(self):
         """Re-enable UI after the download thread finishes."""
         self._set_download_active(False)

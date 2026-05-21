@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
     def _build_sidebar(self):
         self.sidebar = QFrame()
         self.sidebar.setObjectName("Sidebar")
-        self.sidebar.setFixedWidth(304)
+        self.sidebar.setFixedWidth(320)
 
         layout = QVBoxLayout(self.sidebar)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -193,6 +193,10 @@ class MainWindow(QMainWindow):
 
         self.format_box = QComboBox()
         self.format_box.addItems(["mp3", "wav", "m4a"])
+        saved_format = self.settings.get_format()
+        if saved_format in {"mp3", "wav", "m4a"}:
+            self.format_box.setCurrentText(saved_format)
+        self.format_box.currentTextChanged.connect(self._on_format_change)
         format_layout.addWidget(self.format_box)
 
         self.lbl_quality = QLabel()
@@ -202,7 +206,12 @@ class MainWindow(QMainWindow):
 
         self.quality_box = QComboBox()
         self.quality_box.addItems(["320", "192", "128"])
-        self.quality_box.setCurrentText("192")
+        saved_quality = self.settings.get_quality()
+        if saved_quality in {"320", "192", "128"}:
+            self.quality_box.setCurrentText(saved_quality)
+        else:
+            self.quality_box.setCurrentText("192")
+        self.quality_box.currentTextChanged.connect(self._on_quality_change)
         format_layout.addWidget(self.quality_box)
         layout.addWidget(format_group)
 
@@ -402,7 +411,7 @@ class MainWindow(QMainWindow):
 
         self.clear_queue_btn = QPushButton()
         self._bind_text(self.clear_queue_btn, "clear_queue")
-        self.clear_queue_btn.setObjectName("SecondaryButton")
+        self.clear_queue_btn.setObjectName("DangerButton")
         self.clear_queue_btn.clicked.connect(self._on_clear_queue_clicked)
         queue_bar_layout.addWidget(self.clear_queue_btn)
 
@@ -461,7 +470,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(8)
 
-        layout.addWidget(self._make_compact_header(title_key, subtitle_key, eyebrow_key="config_eyebrow"))
+        layout.addWidget(self._make_compact_header(title_key, subtitle_key))
         return group
 
     def _make_panel_header(self, title_key: str, subtitle_key: str):
@@ -527,6 +536,12 @@ class MainWindow(QMainWindow):
             self.lang = "es" if lang == "es" else "en"
             return
         self.apply_language(self.lang_combo.currentData())
+
+    def _on_format_change(self, fmt: str):
+        self.settings.set_format(fmt)
+
+    def _on_quality_change(self, quality: str):
+        self.settings.set_quality(quality)
 
     def add_log(self, text: str):
         self.log_box.append(text)

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
+from urllib.request import Request, urlopen
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
+from mutagen.id3 import APIC, ID3, ID3NoHeaderError, TALB, TIT2, TPE1
+from mutagen.mp4 import MP4, MP4Cover
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
@@ -31,14 +35,22 @@ class MediaDownloader:
     def __init__(self, output_path: str = "downloads"):
         self.output_path = output_path
 
-    def _result_with_extension(self, result: dict, ext: str) -> dict:
+    def _result_with_extension(self, result: dict, ext: str, *, embed_artwork: bool = False) -> dict:
         """Normalize yt-dlp output to a consistent {title, filepath} payload."""
         base_path = result.get("base_path", "")
         final_path = str(Path(base_path).with_suffix(f".{ext}")) if base_path else ""
-        return {
+        payload = {
             "title": result.get("info", {}).get("title", ""),
             "filepath": final_path,
+            "artwork_embedded": False,
+            "artwork_warning": "",
         }
+        if embed_artwork and final_path:
+            self._normalize_audio_tags(final_path, result.get("info", {}), ext)
+            ok, warning = self._embed_cover_art(final_path, result.get("info", {}), ext)
+            payload["artwork_embedded"] = ok
+            payload["artwork_warning"] = warning
+        return payload
 
     def _base_opts(self, progress_callback=None) -> dict:
         out_dir = Path(self.output_path)
@@ -79,39 +91,31 @@ class MediaDownloader:
             opts = {
                 **base,
                 "format": "bestaudio/best",
-                "writethumbnail": True,
                 "postprocessors": [
                     {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(quality)},
-                    {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
                     {"key": "FFmpegMetadata"},
-                    {"key": "EmbedThumbnail"},
                 ],
                 "postprocessor_args": {
-                    "EmbedThumbnail+ffmpeg_o": ["-id3v2_version", "3"],
                     "FFmpegMetadata+ffmpeg_o": ["-id3v2_version", "3"],
                 },
                 "parse_metadata": [
                     "%(uploader|)s:%(meta_artist)s",
                 ],
-                "verbose": True,
             }
             r = self._try_download_with_fallback(url, opts)
-            return self._result_with_extension(r, "mp3")
+            return self._result_with_extension(r, "mp3", embed_artwork=True)
 
         elif format_type == "m4a":
             opts = {
                 **base,
                 "format": "bestaudio/best",
-                "writethumbnail": True,
                 "postprocessors": [
                     {"key": "FFmpegExtractAudio", "preferredcodec": "m4a", "preferredquality": str(quality)},
-                    {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
                     {"key": "FFmpegMetadata"},
-                    {"key": "EmbedThumbnail"}
                 ],
             }
             r = self._try_download_with_fallback(url, opts)
-            return self._result_with_extension(r, "m4a")
+            return self._result_with_extension(r, "m4a", embed_artwork=True)
 
         elif format_type == "wav":
             opts = {
@@ -175,3 +179,136 @@ class MediaDownloader:
             fb2 = dict(opts)
             fb2["extractor_args"] = {"youtube": {"player_client": ["web"]}}
             return _run(fb2)
+
+    def _best_thumbnail_url(self, info: dict) -> str:
+        if not isinstance(info, dict):
+            return ""
+
+        thumbnails = info.get("thumbnails")
+        if isinstance(thumbnails, list) and thumbnails:
+            valid = [t for t in thumbnails if isinstance(t, dict) and t.get("url")]
+            if valid:
+                def _score(item: dict) -> int:
+                    return int(item.get("width") or 0) * int(item.get("height") or 0)
+
+                return str(max(valid, key=_score).get("url") or "")
+
+        thumbnail = info.get("thumbnail")
+        return str(thumbnail) if thumbnail else ""
+
+    def _fetch_thumbnail_bytes(self, url: str) -> bytes | None:
+        if not url:
+            return None
+
+        try:
+            req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urlopen(req, timeout=12) as resp:
+                return resp.read(8 * 1024 * 1024)
+        except Exception:
+            return None
+
+    def _prepare_cover_jpeg(self, raw: bytes, size: int = 800) -> bytes:
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(raw)) as img:
+            img = img.convert("RGB")
+            img = ImageOps.fit(img, (size, size), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+            out = BytesIO()
+            img.save(out, format="JPEG", quality=88, optimize=True, progressive=False)
+            return out.getvalue()
+
+    def _embed_cover_art(self, media_path: str, info: dict, ext: str) -> tuple[bool, str]:
+        path = Path(media_path)
+        if not path.exists():
+            return False, "Output file was not found for artwork embedding."
+
+        raw = self._fetch_thumbnail_bytes(self._best_thumbnail_url(info))
+        if not raw:
+            return False, "No thumbnail was available to embed."
+
+        try:
+            cover = self._prepare_cover_jpeg(raw)
+        except Exception as exc:
+            return False, f"Thumbnail could not be normalized: {exc}"
+
+        try:
+            if ext == "mp3":
+                try:
+                    tags = ID3(path)
+                except ID3NoHeaderError:
+                    tags = ID3()
+                tags.delall("APIC")
+                tags.add(
+                    APIC(
+                        encoding=3,
+                        mime="image/jpeg",
+                        type=3,
+                        desc="Cover",
+                        data=cover,
+                    )
+                )
+                tags.save(path, v2_version=3)
+                return True, ""
+
+            if ext == "m4a":
+                tags = MP4(path)
+                tags["covr"] = [MP4Cover(cover, imageformat=MP4Cover.FORMAT_JPEG)]
+                tags.save()
+                return True, ""
+
+            return False, f"Artwork embedding is not supported for .{ext}."
+        except Exception as exc:
+            return False, f"Artwork could not be embedded: {exc}"
+
+    def _metadata_text(self, info: dict, key: str) -> str:
+        value = info.get(key) if isinstance(info, dict) else ""
+        return str(value).strip() if value else ""
+
+    def _fallback_album(self, info: dict) -> str:
+        return (
+            self._metadata_text(info, "album")
+            or self._metadata_text(info, "playlist_title")
+            or self._metadata_text(info, "title")
+        )
+
+    def _normalize_audio_tags(self, media_path: str, info: dict, ext: str) -> None:
+        path = Path(media_path)
+        if not path.exists():
+            return
+
+        title = self._metadata_text(info, "title")
+        artist = (
+            self._metadata_text(info, "artist")
+            or self._metadata_text(info, "uploader")
+            or self._metadata_text(info, "channel")
+        )
+        album = self._fallback_album(info)
+
+        try:
+            if ext == "mp3":
+                try:
+                    tags = ID3(path)
+                except ID3NoHeaderError:
+                    tags = ID3()
+                if title:
+                    tags.delall("TIT2")
+                    tags.add(TIT2(encoding=3, text=title))
+                if artist:
+                    tags.delall("TPE1")
+                    tags.add(TPE1(encoding=3, text=artist))
+                if album:
+                    tags.delall("TALB")
+                    tags.add(TALB(encoding=3, text=album))
+                tags.save(path, v2_version=3)
+
+            elif ext == "m4a":
+                tags = MP4(path)
+                if title:
+                    tags["\xa9nam"] = [title]
+                if artist:
+                    tags["\xa9ART"] = [artist]
+                if album:
+                    tags["\xa9alb"] = [album]
+                tags.save()
+        except Exception:
+            return

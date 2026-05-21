@@ -27,8 +27,8 @@ def _fetch_thumbnail_bytes(url: str) -> bytes | None:
 
     try:
         req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(req, timeout=12) as resp:
-            return resp.read()
+        with urlopen(req, timeout=4) as resp:
+            return resp.read(4 * 1024 * 1024)
     except Exception:
         return None
 
@@ -38,6 +38,21 @@ def _display_title(info: dict, fallback: str) -> str:
         return fallback
     title = str(info.get("title") or "").strip()
     return title or fallback
+
+
+def _metadata_payload(info: dict, fallback: str, thumbnail_data: bytes | None = None) -> dict:
+    thumbnail = _best_thumbnail_url(info)
+    return {
+        "title": _display_title(info, fallback),
+        "uploader": info.get("uploader") or info.get("channel") or "",
+        "duration": info.get("duration"),
+        "thumbnail": thumbnail,
+        "thumbnail_data": thumbnail_data,
+    }
+
+
+def _needs_metadata(meta: dict) -> bool:
+    return not meta.get("title") or not meta.get("thumbnail") or not meta.get("uploader")
 
 
 class QueueMetadataWorker(QObject):
@@ -56,12 +71,20 @@ class QueueMetadataWorker(QObject):
             thumb_bytes = None
             try:
                 info = self.downloader.get_info(url)
+                thumb_url = _best_thumbnail_url(info)
+                thumb_bytes = _fetch_thumbnail_bytes(thumb_url)
                 title = _display_title(info, url)
-                thumb_bytes = _fetch_thumbnail_bytes(_best_thumbnail_url(info))
+                payload = _metadata_payload(info, url, thumb_bytes)
             except Exception:
-                pass
+                payload = {
+                    "title": title,
+                    "uploader": "",
+                    "duration": None,
+                    "thumbnail": "",
+                    "thumbnail_data": thumb_bytes,
+                }
 
-            self.item_resolved.emit(row_id, title, thumb_bytes)
+            self.item_resolved.emit(row_id, title, payload)
 
         self.finished.emit()
 
@@ -111,8 +134,10 @@ class PlaylistExpandWorker(QObject):
 
             seen.add(webpage)
             title = _display_title(entry, webpage)
-            thumb_bytes = _fetch_thumbnail_bytes(_best_thumbnail_url(entry))
-            self.item_found.emit(self.fmt, webpage, title, thumb_bytes)
+            thumb_url = _best_thumbnail_url(entry)
+            thumb_bytes = _fetch_thumbnail_bytes(thumb_url)
+            payload = _metadata_payload(entry, webpage, thumb_bytes)
+            self.item_found.emit(self.fmt, webpage, title, payload)
             count += 1
 
         self.finished.emit(count)
@@ -171,22 +196,32 @@ class DownloadWorker(QObject):
         total_items = len(self.items)
         self.log_event.emit({"key": "starting_batch", "args": {"count": total_items}})
 
-        for index, (row_id, url) in enumerate(self.items, start=1):
+        for index, item in enumerate(self.items, start=1):
+            if len(item) == 4:
+                row_id, url, item_fmt, meta = item
+            else:
+                row_id, url = item[:2]
+                item_fmt = self.fmt
+                meta = {}
             self._current_row_id = row_id
-            self._current_title = ""
+            self._current_title = str(meta.get("title") or "")
             self._current_output = ""
-            self.item_update.emit(row_id, "downloading", 0, "", "")
+            self.item_update.emit(row_id, "downloading", 0, self._current_title, "")
 
             self.log_event.emit(
                 {"key": "item_downloading", "args": {"i": index, "total": total_items, "url": url}}
             )
 
             try:
-                info = self.downloader.get_info(url)
-                title = _display_title(info, url)
-                uploader = info.get("uploader") or info.get("channel") or ""
-                duration = info.get("duration")
-                thumbnail = _best_thumbnail_url(info)
+                if _needs_metadata(meta):
+                    info = self.downloader.get_info(url)
+                    meta = _metadata_payload(info, url)
+
+                title = self._current_title or url
+                title = meta.get("title") or title
+                uploader = meta.get("uploader") or ""
+                duration = meta.get("duration")
+                thumbnail = meta.get("thumbnail") or ""
                 nice = f"{title}" + (f" - {uploader}" if uploader else "")
 
                 self._current_title = title
@@ -208,19 +243,24 @@ class DownloadWorker(QObject):
 
                 result = self.downloader.download(
                     url,
-                    format_type=self.fmt,
+                    format_type=item_fmt or self.fmt,
                     quality=self.quality,
                     progress_callback=self.hook,
                 )
 
                 out_file = ""
+                artwork_warning = ""
                 if isinstance(result, dict):
                     out_file = result.get("filepath") or ""
+                    title = result.get("title") or title
+                    artwork_warning = result.get("artwork_warning") or ""
 
                 if out_file:
                     self._current_output = out_file
 
                 self.item_update.emit(row_id, "done", 100, title, self._current_output)
+                if artwork_warning:
+                    self.log_event.emit({"key": "artwork_warning", "args": {"warning": artwork_warning}})
                 self.log_event.emit({"key": "done", "args": {}})
 
             except Exception as e:

@@ -30,6 +30,9 @@ STATUS_COLORS = {
 
 ROW_ID_ROLE = int(Qt.UserRole) + 10
 OUTPUT_ROLE = int(Qt.UserRole) + 11
+THUMBNAIL_URL_ROLE = int(Qt.UserRole) + 12
+UPLOADER_ROLE = int(Qt.UserRole) + 13
+DURATION_ROLE = int(Qt.UserRole) + 14
 
 
 class QueueManager:
@@ -83,6 +86,9 @@ class QueueManager:
         auto_save: bool = True,
         settings_set_fn: Callable | None = None,
         thumbnail_data: bytes | None = None,
+        thumbnail_url: str = "",
+        uploader: str = "",
+        duration: int | None = None,
         row_id: str | None = None,
     ) -> str:
         if settings_set_fn:
@@ -92,7 +98,14 @@ class QueueManager:
         row = self._table.rowCount()
         self._table.insertRow(row)
 
-        self._set_title_cell(row, title, row_id)
+        self._set_title_cell(
+            row,
+            title,
+            row_id,
+            thumbnail_url=thumbnail_url,
+            uploader=uploader,
+            duration=duration,
+        )
         self._set_text_cell(row, 1, url, row_id)
         self._set_text_cell(row, 2, fmt, row_id)
         self._set_thumbnail_cell(
@@ -121,8 +134,8 @@ class QueueManager:
         if self._settings_set_fn:
             self.save(self._settings_set_fn)
 
-    def get_queued_rows(self, fallback_fmt: str = "mp3") -> list[tuple[str, str, str]]:
-        out: list[tuple[str, str, str]] = []
+    def get_queued_rows(self, fallback_fmt: str = "mp3") -> list[tuple[str, str, str, dict]]:
+        out: list[tuple[str, str, str, dict]] = []
         for row in range(self._table.rowCount()):
             status_item = self._table.item(row, 3)
             status_key = status_item.data(Qt.UserRole) if status_item else "queued"
@@ -133,7 +146,7 @@ class QueueManager:
             fmt = self._table.item(row, 2).text() if self._table.item(row, 2) else fallback_fmt
             row_id = self._row_id_for_row(row)
             if row_id and url.strip():
-                out.append((row_id, url.strip(), fmt))
+                out.append((row_id, url.strip(), fmt, self._metadata_for_row(row)))
         return out
 
     def update_item(
@@ -172,6 +185,9 @@ class QueueManager:
         *,
         title: str = "",
         thumbnail_data: bytes | None = None,
+        thumbnail_url: str = "",
+        uploader: str = "",
+        duration: int | None = None,
         settings_set_fn: Callable | None = None,
     ):
         if settings_set_fn:
@@ -182,7 +198,14 @@ class QueueManager:
             return
 
         if title:
-            self._set_title_cell(row, title, row_id)
+            self._set_title_cell(
+                row,
+                title,
+                row_id,
+                thumbnail_url=thumbnail_url,
+                uploader=uploader,
+                duration=duration,
+            )
         if thumbnail_data:
             self._set_thumbnail_cell(row, row_id=row_id, thumbnail_data=thumbnail_data)
 
@@ -221,6 +244,7 @@ class QueueManager:
             url = self._table.item(row, 1).text() if self._table.item(row, 1) else ""
             fmt = self._table.item(row, 2).text() if self._table.item(row, 2) else ""
             row_id = self._row_id_for_row(row)
+            meta = self._metadata_for_row(row)
 
             status_item = self._table.item(row, 3)
             status_key = status_item.data(Qt.UserRole) if status_item else "queued"
@@ -237,6 +261,9 @@ class QueueManager:
                     "status": status_key,
                     "progress": int(pct) if pct is not None else 0,
                     "output": self._output_path_for_row(row),
+                    "thumbnail": meta.get("thumbnail", ""),
+                    "uploader": meta.get("uploader", ""),
+                    "duration": meta.get("duration"),
                 }
             )
 
@@ -262,6 +289,9 @@ class QueueManager:
                 pct=item.get("progress", 0),
                 out_file=item.get("output", ""),
                 auto_save=False,
+                thumbnail_url=item.get("thumbnail", ""),
+                uploader=item.get("uploader", ""),
+                duration=item.get("duration"),
                 row_id=item.get("row_id") or None,
             )
 
@@ -352,6 +382,17 @@ class QueueManager:
         item = self._table.item(row, 0)
         return item.data(ROW_ID_ROLE) if item else ""
 
+    def _metadata_for_row(self, row: int) -> dict:
+        item = self._table.item(row, 0)
+        if not item:
+            return {}
+        return {
+            "title": item.text(),
+            "thumbnail": item.data(THUMBNAIL_URL_ROLE) or "",
+            "uploader": item.data(UPLOADER_ROLE) or "",
+            "duration": item.data(DURATION_ROLE),
+        }
+
     def _output_path_for_row(self, row: int) -> str:
         item = self._table.item(row, 5)
         if not item:
@@ -367,8 +408,26 @@ class QueueManager:
         item.setText(text)
         item.setToolTip(text)
 
-    def _set_title_cell(self, row: int, title: str, row_id: str):
+    def _set_title_cell(
+        self,
+        row: int,
+        title: str,
+        row_id: str,
+        *,
+        thumbnail_url: str = "",
+        uploader: str = "",
+        duration: int | None = None,
+    ):
         self._set_text_cell(row, 0, title, row_id)
+        item = self._table.item(row, 0)
+        if not item:
+            return
+        if thumbnail_url:
+            item.setData(THUMBNAIL_URL_ROLE, thumbnail_url)
+        if uploader:
+            item.setData(UPLOADER_ROLE, uploader)
+        if duration:
+            item.setData(DURATION_ROLE, int(duration))
 
     def _add_delete_button(self, row: int, row_id: str):
         btn = self._table.cellWidget(row, 6)
@@ -487,7 +546,12 @@ class QueueManager:
         item.setIcon(icon)
 
     def _output_tooltip(self, out_file: str) -> str:
-        return out_file or self._t("cover_tooltip_pending")
+        if not out_file:
+            return self._t("cover_tooltip_pending")
+        try:
+            return self._t("cover_embedded").format(path=out_file)
+        except Exception:
+            return out_file
 
     def _build_placeholder_icon(self) -> QIcon:
         pixmap = QPixmap(72, 40)

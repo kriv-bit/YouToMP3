@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPixmap
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
@@ -67,7 +67,7 @@ class NowDownloadingCard(QFrame):
             self._lbl_badge.hide()
 
         if thumbnail:
-            self._nam.get(QNetworkRequest(thumbnail))
+            self._nam.get(QNetworkRequest(QUrl(thumbnail)))
         else:
             self._set_placeholder_cover()
 
@@ -161,7 +161,7 @@ class NowDownloadingCard(QFrame):
         painter.drawRoundedRect(0, 0, self.COVER_SIZE - 1, self.COVER_SIZE - 1, 12, 12)
         painter.setPen(QColor("#7E8B9A"))
         painter.setFont(QFont("Segoe UI Symbol", 26))
-        painter.drawText(px.rect(), Qt.AlignCenter, "♪")
+        painter.drawText(px.rect(), Qt.AlignCenter, "\u266a")
         painter.end()
         self._cover.setPixmap(px)
 
