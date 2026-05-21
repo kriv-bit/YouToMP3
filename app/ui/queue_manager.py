@@ -6,6 +6,8 @@ import json
 from typing import Callable
 from uuid import uuid4
 
+from pathlib import Path
+
 from PySide6.QtCore import QPoint, Qt, QSize
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap, QPolygon
 from PySide6.QtWidgets import (
@@ -325,15 +327,27 @@ class QueueManager:
 
         for row in range(self._table.rowCount()):
             for col in range(self._table.columnCount()):
-                if col == 6:
-                    continue
                 src = self._table.item(row, col)
+                if col == 6:
+                    row_id = self._row_id_for_row(row)
+                    btn = self._make_delete_button(table, row_id)
+                    btn.clicked.connect(lambda _checked=False, b=btn, t=table: self._delete_modal_row(b, t, dlg))
+                    is_active = row_id == self._active_row_id
+                    btn.setEnabled(not is_active)
+                    btn.setToolTip(
+                        self._t("delete_active_item") if is_active else self._t("delete_row")
+                    )
+                    table.setCellWidget(row, col, btn)
+                    continue
                 if not src:
                     continue
                 dst = QTableWidgetItem(src.text())
                 dst.setData(Qt.UserRole, src.data(Qt.UserRole))
                 dst.setData(ROW_ID_ROLE, src.data(ROW_ID_ROLE))
                 dst.setData(OUTPUT_ROLE, src.data(OUTPUT_ROLE))
+                dst.setData(THUMBNAIL_URL_ROLE, src.data(THUMBNAIL_URL_ROLE))
+                dst.setData(UPLOADER_ROLE, src.data(UPLOADER_ROLE))
+                dst.setData(DURATION_ROLE, src.data(DURATION_ROLE))
                 dst.setForeground(src.foreground())
                 dst.setBackground(src.background())
                 dst.setToolTip(src.toolTip())
@@ -432,34 +446,57 @@ class QueueManager:
     def _add_delete_button(self, row: int, row_id: str):
         btn = self._table.cellWidget(row, 6)
         if not isinstance(btn, QToolButton):
-            btn = QToolButton(self._table)
-            btn.setText("x")
-            btn.setObjectName("RowDeleteButton")
+            btn = self._make_delete_button(self._table, row_id)
             btn.clicked.connect(lambda: self._delete_row_from_button(btn))
             self._table.setCellWidget(row, 6, btn)
 
         btn.setProperty("row_id", row_id)
         self.refresh_action_buttons()
 
+    def _make_delete_button(self, parent, row_id: str) -> QToolButton:
+        btn = QToolButton(parent)
+        btn.setText("x")
+        btn.setObjectName("RowDeleteButton")
+        btn.setProperty("row_id", row_id)
+        return btn
+
     def _delete_row_from_button(self, btn: QToolButton):
         row_id = btn.property("row_id")
-        if row_id and row_id == self._active_row_id:
-            QMessageBox.warning(self._table, self._t("error_title"), self._t("delete_active_item"))
+        if not row_id:
+            return
+        self.delete_row(row_id, parent=self._table)
+
+    def _delete_modal_row(self, btn: QToolButton, table: QTableWidget, parent) -> None:
+        row_id = btn.property("row_id")
+        if not row_id:
             return
 
-        if self._can_modify_fn and not self._can_modify_fn():
-            QMessageBox.warning(self._table, self._t("error_title"), self._t("cannot_edit_while_downloading"))
-            return
-
-        point = btn.mapTo(self._table.viewport(), QPoint(0, 0))
-        idx = self._table.indexAt(point)
+        point = btn.mapTo(table.viewport(), QPoint(0, 0))
+        idx = table.indexAt(point)
         if not idx.isValid():
             return
 
-        self._table.removeRow(idx.row())
+        if self.delete_row(row_id, parent=parent):
+            table.removeRow(idx.row())
+
+    def delete_row(self, row_id: str, parent=None) -> bool:
+        if row_id and row_id == self._active_row_id:
+            QMessageBox.warning(parent or self._table, self._t("error_title"), self._t("delete_active_item"))
+            return False
+
+        if self._can_modify_fn and not self._can_modify_fn():
+            QMessageBox.warning(parent or self._table, self._t("error_title"), self._t("cannot_edit_while_downloading"))
+            return False
+
+        row = self.find_row(row_id)
+        if row < 0:
+            return False
+
+        self._table.removeRow(row)
 
         if self._settings_set_fn:
             self.save(self._settings_set_fn)
+        return True
 
     def _set_status_cell(self, row: int, status_key: str):
         item = self._table.item(row, 3)
@@ -530,9 +567,11 @@ class QueueManager:
         icon = item.icon()
         if icon.isNull():
             icon = self._placeholder_icon
-        if thumbnail_data:
+        embedded_cover = None if thumbnail_data else self._cover_data_from_output(current_output)
+        cover_data = thumbnail_data or embedded_cover
+        if cover_data:
             pixmap = QPixmap()
-            if pixmap.loadFromData(thumbnail_data):
+            if pixmap.loadFromData(cover_data):
                 scaled = pixmap.scaled(
                     QSize(72, 40),
                     Qt.KeepAspectRatioByExpanding,
@@ -567,3 +606,31 @@ class QueueManager:
         painter.drawPolygon(QPolygon([QPoint(29, 12), QPoint(29, 28), QPoint(45, 20)]))
         painter.end()
         return QIcon(pixmap)
+
+    def _cover_data_from_output(self, out_file: str | None) -> bytes | None:
+        if not out_file:
+            return None
+
+        path = Path(out_file)
+        if not path.exists():
+            return None
+
+        suffix = path.suffix.lower()
+        try:
+            if suffix == ".mp3":
+                from mutagen.id3 import ID3
+
+                tags = ID3(path)
+                covers = tags.getall("APIC")
+                return bytes(covers[0].data) if covers else None
+
+            if suffix == ".m4a":
+                from mutagen.mp4 import MP4
+
+                tags = MP4(path)
+                covers = tags.tags.get("covr") if tags.tags else None
+                return bytes(covers[0]) if covers else None
+        except Exception:
+            return None
+
+        return None
