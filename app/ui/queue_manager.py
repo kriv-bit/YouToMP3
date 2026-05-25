@@ -259,6 +259,13 @@ class QueueManager:
                 return row
         return -1
 
+    def get_title(self, row_id: str) -> str:
+        row = self.find_row(row_id)
+        if row < 0:
+            return ""
+        cell = self._table.item(row, 0)
+        return cell.text() if cell else ""
+
     def save(self, settings_set_fn: Callable):
         self._settings_set_fn = settings_set_fn
 

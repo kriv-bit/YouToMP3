@@ -522,6 +522,47 @@ def main_qss(theme: str = "dark") -> str:
             border-radius: 4px;
         }}
 
+        QFrame#FlashBar {{
+            background: {c['SURFACE_ALT']};
+            border: 1px solid {c['BORDER_STRONG']};
+            border-radius: 8px;
+        }}
+
+        QLabel#FlashBarIcon {{
+            font-size: 16px;
+            color: {c['TEXT_FAINT']};
+        }}
+
+        QLabel#FlashBarMessage {{
+            color: {c['TEXT']};
+            font-size: 12px;
+        }}
+
+        QPushButton#FlashBarAccept {{
+            background: {c['ACCENT']};
+            border: none;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+        }}
+
+        QPushButton#FlashBarAccept:hover {{
+            background: {c['ACCENT_HOVER']};
+        }}
+
+        QToolButton#FlashBarDismiss {{
+            background: transparent;
+            border: none;
+            color: {c['TEXT_FAINT']};
+            font-weight: 700;
+            padding: 4px 8px;
+        }}
+
+        QToolButton#FlashBarDismiss:hover {{
+            color: {c['DANGER']};
+        }}
+
         QScrollBar:vertical {{
             background: {c['SURFACE_ALT']};
             width: 10px;

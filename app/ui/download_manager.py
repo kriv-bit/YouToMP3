@@ -236,6 +236,10 @@ class DownloadManager(QObject):
     def active_count(self) -> int:
         return len(self._running)
 
+    @property
+    def total(self) -> int:
+        return self._total
+
     @Slot()
     def start(self, items, fmt: str, quality: str):
         if self._running_anything:

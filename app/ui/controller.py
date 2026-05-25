@@ -198,6 +198,64 @@ class MainController(QObject):
 
         self._start_playlist_expansion(url, fmt, data.get("limit", 200))
 
+    def add_url_to_queue(self, url: str) -> str | None:
+        """Headless equivalent of the Add Song dialog flow."""
+        url = (url or "").strip()
+        if not url:
+            return None
+        fmt = self.win.format_box.currentText()
+        row_id = self.win.queue.add_row(
+            url=url,
+            fmt=fmt,
+            title=self._t("resolving_title"),
+            status_key="queued",
+            pct=0,
+            settings_set_fn=self._settings_set,
+        )
+        self._start_metadata_lookup([(row_id, url)])
+        return row_id
+
+    def add_urls_to_queue(self, urls: list[str]) -> int:
+        """Enqueue a batch of URLs, deduping against rows that are already present."""
+        if not urls:
+            return 0
+        existing = self._existing_urls()
+        fmt = self.win.format_box.currentText()
+        jobs: list[tuple[str, str]] = []
+        for url in urls:
+            clean = (url or "").strip()
+            if not clean or clean in existing:
+                continue
+            existing.add(clean)
+            row_id = self.win.queue.add_row(
+                url=clean,
+                fmt=fmt,
+                title=self._t("resolving_title"),
+                status_key="queued",
+                pct=0,
+                auto_save=False,
+            )
+            jobs.append((row_id, clean))
+        if not jobs:
+            return 0
+        self.win.queue.save(self._settings_set)
+        self._start_metadata_lookup(jobs)
+        return len(jobs)
+
+    def _existing_urls(self) -> set[str]:
+        urls: set[str] = set()
+        table = self.win.queue._table
+        for row in range(table.rowCount()):
+            cell = table.item(row, 1)
+            if cell is not None:
+                text = (cell.text() or "").strip()
+                if text:
+                    urls.add(text)
+        return urls
+
+    def is_url_in_queue(self, url: str) -> bool:
+        return (url or "").strip() in self._existing_urls()
+
     def open_paste_batch_dialog(self):
         """Show the Paste Batch modal and enqueue all entered URLs."""
         dlg = PasteBatchDialog(self.win, t=self._tf)

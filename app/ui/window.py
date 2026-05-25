@@ -4,7 +4,7 @@
 import os
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QFont, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -25,12 +25,15 @@ from PySide6.QtWidgets import (
 )
 
 from app.downloader import MediaDownloader
+from app.ui.clipboard_watcher import ClipboardWatcher, extract_youtube_urls
 from app.ui.controller import MainController
+from app.ui.flash_bar import FlashBar
 from app.ui.i18n import TRANSLATIONS
 from app.ui.now_downloading import NowDownloadingCard
 from app.ui.queue_manager import QueueManager
 from app.ui.settings import AppSettings
 from app.ui.style import main_qss
+from app.ui.tray import AppTrayIcon
 from app.ui.widgets import add_shadow, set_elided
 
 
@@ -45,8 +48,10 @@ class MainWindow(QMainWindow):
         self.theme = self.settings.get_theme()
         self.output_folder = self.settings.get_output_folder()
 
-        self.setWindowIcon(QIcon(os.path.join("assets", "icon.ico")))
+        self.app_icon = QIcon(os.path.join("assets", "icon.ico"))
+        self.setWindowIcon(self.app_icon)
         self.downloader = MediaDownloader(output_path=self.output_folder)
+        self.setAcceptDrops(True)
 
         self.thread = None
         self.worker = None
@@ -75,11 +80,124 @@ class MainWindow(QMainWindow):
         self.settings.restore_geometry(self)
         self.queue.load(self._settings_get)
 
+        self._install_clipboard_watcher()
+        self._install_tray()
+        self.flash_bar.accepted.connect(self.ctrl.add_url_to_queue)
+        self.download_manager.job_finished.connect(self._on_job_finished_notify)
+        self.download_manager.finished.connect(self._on_queue_finished_notify)
+        self.download_manager.status_key.connect(self._sync_tray_pause)
+
         self.add_log(self._t("ready"))
+
+    def _install_clipboard_watcher(self):
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is None:
+            self.clipboard_watcher = None
+            return
+        self.clipboard_watcher = ClipboardWatcher(
+            clipboard,
+            is_in_queue=self.ctrl.is_url_in_queue,
+            parent=self,
+        )
+        self.clipboard_watcher.youtube_url_detected.connect(self._on_clipboard_url)
+
+    def _install_tray(self):
+        self.tray = AppTrayIcon(self.app_icon, t_fn=self._t, parent=self)
+        self.tray.show_window_requested.connect(self._show_from_tray)
+        self.tray.hide_window_requested.connect(self.hide)
+        self.tray.pause_toggle_requested.connect(self.ctrl.toggle_pause)
+        self.tray.open_folder_requested.connect(self.ctrl.open_output_folder)
+        self.tray.quit_requested.connect(self._quit_from_tray)
+        self.tray.show()
+
+    def _on_clipboard_url(self, url: str):
+        if not url:
+            return
+        self.flash_bar.show_url_prompt(url)
+
+    def _sync_tray_pause(self, status_key: str):
+        if hasattr(self, "tray"):
+            self.tray.set_pause_state(paused=(status_key == "paused"))
+
+    def _on_job_finished_notify(self, row_id: str, final_status: str):
+        if not hasattr(self, "tray"):
+            return
+        title = self.queue.get_title(row_id) or row_id
+        if final_status == "done":
+            self.tray.notify(
+                self._t("notify_done_title"),
+                self._tf("notify_done_body", title=title),
+                kind="info",
+            )
+        elif final_status == "error":
+            self.tray.notify(
+                self._t("notify_error_title"),
+                self._tf("notify_error_body", title=title, error=""),
+                kind="error",
+            )
+
+    def _on_queue_finished_notify(self):
+        if not hasattr(self, "tray"):
+            return
+        self.tray.notify(
+            self._t("notify_all_done_title"),
+            self._tf("notify_all_done_body", count=self.download_manager.total),
+            kind="info",
+        )
+
+    def _show_from_tray(self):
+        if self.isMinimized():
+            self.showNormal()
+        else:
+            self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _quit_from_tray(self):
+        if hasattr(self, "tray"):
+            self.tray.hide()
+        self.close()
+
+    def dragEnterEvent(self, event):
+        mime = event.mimeData()
+        if mime.hasUrls() or mime.hasText():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        mime = event.mimeData()
+        urls: list[str] = []
+        if mime.hasUrls():
+            for u in mime.urls():
+                text = u.toString()
+                urls.extend(extract_youtube_urls(text))
+        if mime.hasText():
+            urls.extend(extract_youtube_urls(mime.text()))
+
+        # Dedup preserving order
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for u in urls:
+            if u not in seen:
+                seen.add(u)
+                deduped.append(u)
+
+        if not deduped:
+            self.add_log(self._t("drop_no_urls"))
+            event.ignore()
+            return
+
+        added = self.ctrl.add_urls_to_queue(deduped)
+        if added:
+            self.add_log(self._tf("drop_added", count=added))
+        event.acceptProposedAction()
 
     def closeEvent(self, event):
         if hasattr(self, "queue"):
             self.queue.save(self._settings_set)
+        if hasattr(self, "tray"):
+            self.tray.hide()
         self.settings.save_geometry(self)
         super().closeEvent(event)
 
@@ -125,6 +243,10 @@ class MainWindow(QMainWindow):
             self.pause_btn.setText(
                 self._t("resume") if self.download_manager.is_paused else self._t("pause")
             )
+        if hasattr(self, "flash_bar"):
+            self.flash_bar.set_t(self._t)
+        if hasattr(self, "tray"):
+            self.tray.set_t(self._t)
 
         if hasattr(self, "queue"):
             self.queue.set_t(self._t)
@@ -404,6 +526,9 @@ class MainWindow(QMainWindow):
 
         header_layout.addLayout(actions)
         content_layout.addWidget(header_panel)
+
+        self.flash_bar = FlashBar(t_fn=self._t, parent=self)
+        content_layout.addWidget(self.flash_bar)
 
         self.now_label = QLabel("")
         self.now_label.setObjectName("NowLabel")
