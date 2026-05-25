@@ -199,6 +199,8 @@ class MainWindow(QMainWindow):
             self.queue.save(self._settings_set)
         if hasattr(self, "tray"):
             self.tray.hide()
+        if hasattr(self, "download_manager"):
+            self.download_manager.shutdown()
         self.settings.save_geometry(self)
         super().closeEvent(event)
 

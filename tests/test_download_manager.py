@@ -208,20 +208,32 @@ def fast_downloader():
     return d
 
 
+@pytest.fixture
+def manager(fast_downloader):
+    """Yield a fresh DownloadManager and shut it down cleanly at teardown.
+
+    Without the shutdown, worker QThreads can outlive the test and crash the
+    process on PySide6 6.11 + Python 3.11/3.12 (CI segfaults during pytest exit).
+    """
+    m = DownloadManager(fast_downloader)
+    yield m
+    m.shutdown()
+
+
 def _wait_for_finish(qtbot, manager: DownloadManager, timeout_ms: int = 3000):
     with qtbot.waitSignal(manager.finished, timeout=timeout_ms):
         pass
 
 
 class TestDownloadManagerLifecycle:
-    def test_empty_start_finishes_immediately(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_empty_start_finishes_immediately(self, qtbot, manager, fast_downloader) -> None:
+        m = manager
         with qtbot.waitSignal(m.finished, timeout=2000):
             m.start([], "mp3", "192")
         assert not m.is_running
 
-    def test_single_item_completes(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_single_item_completes(self, qtbot, manager, fast_downloader) -> None:
+        m = manager
         item = ("r1", "https://youtu.be/a", "mp3", {"title": "T", "uploader": "U", "thumbnail": "th"})
         results: list[tuple[str, str]] = []
         m.job_finished.connect(lambda rid, status: results.append((rid, status)))
@@ -233,8 +245,8 @@ class TestDownloadManagerLifecycle:
         assert not m.is_running
         fast_downloader.download.assert_called_once()
 
-    def test_multiple_items_all_complete(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_multiple_items_all_complete(self, qtbot, manager, fast_downloader) -> None:
+        m = manager
         items = [
             (f"r{i}", f"https://youtu.be/v{i}", "mp3", {"title": f"T{i}", "uploader": "U", "thumbnail": "th"})
             for i in range(4)
@@ -247,8 +259,8 @@ class TestDownloadManagerLifecycle:
 
 
 class TestDownloadManagerConcurrency:
-    def test_set_concurrency_is_clamped(self, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_set_concurrency_is_clamped(self, manager) -> None:
+        m = manager
         m.set_concurrency(0)
         assert m.concurrency == 1
         m.set_concurrency(10)
@@ -256,15 +268,15 @@ class TestDownloadManagerConcurrency:
         m.set_concurrency(3)
         assert m.concurrency == 3
 
-    def test_set_concurrency_handles_garbage(self, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_set_concurrency_handles_garbage(self, manager) -> None:
+        m = manager
         m.set_concurrency("not-a-number")  # type: ignore[arg-type]
         assert m.concurrency == 1
 
 
 class TestDownloadManagerCancel:
-    def test_cancels_pending_item_before_it_runs(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_cancels_pending_item_before_it_runs(self, qtbot, manager) -> None:
+        m = manager
         m.set_concurrency(1)
         items = [
             ("r1", "https://a", "mp3", {"title": "T1", "uploader": "U", "thumbnail": "th"}),
@@ -288,8 +300,8 @@ class TestDownloadManagerCancel:
 
         assert statuses.get("r2") == "cancelled"
 
-    def test_cancel_all_marks_pending_as_cancelled(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_cancel_all_marks_pending_as_cancelled(self, qtbot, manager) -> None:
+        m = manager
         m.set_concurrency(1)
         items = [
             ("r1", "https://a", "mp3", {"title": "T1", "uploader": "U", "thumbnail": "th"}),
@@ -310,8 +322,8 @@ class TestDownloadManagerCancel:
 
 
 class TestDownloadManagerPause:
-    def test_pause_emits_paused_status(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_pause_emits_paused_status(self, qtbot, manager) -> None:
+        m = manager
         statuses: list[str] = []
         m.status_key.connect(statuses.append)
         m.start([], "mp3", "192")  # immediate finish
@@ -319,15 +331,15 @@ class TestDownloadManagerPause:
         m.pause()
         assert "paused" in statuses
 
-    def test_pause_when_not_running_is_noop(self, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_pause_when_not_running_is_noop(self, manager) -> None:
+        m = manager
         statuses: list[str] = []
         m.status_key.connect(statuses.append)
         m.pause()
         assert statuses == []
 
-    def test_resume_when_not_paused_is_noop(self, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_resume_when_not_paused_is_noop(self, manager) -> None:
+        m = manager
         m._running_anything = True
         statuses: list[str] = []
         m.status_key.connect(statuses.append)
@@ -336,8 +348,8 @@ class TestDownloadManagerPause:
 
 
 class TestDownloadManagerProgress:
-    def test_progress_emits_zero_with_no_items(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_progress_emits_zero_with_no_items(self, qtbot, manager) -> None:
+        m = manager
         progress: list[int] = []
         m.progress.connect(progress.append)
         with qtbot.waitSignal(m.finished, timeout=2000):
@@ -345,8 +357,8 @@ class TestDownloadManagerProgress:
         # progress(0) on start, then 0 on wrap_up (since total=0)
         assert progress[0] == 0
 
-    def test_progress_reaches_100_after_completion(self, qtbot, fast_downloader) -> None:
-        m = DownloadManager(fast_downloader)
+    def test_progress_reaches_100_after_completion(self, qtbot, manager) -> None:
+        m = manager
         progress: list[int] = []
         m.progress.connect(progress.append)
         item = ("r1", "https://a", "mp3", {"title": "T", "uploader": "U", "thumbnail": "th"})

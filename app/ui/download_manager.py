@@ -348,7 +348,12 @@ class DownloadManager(QObject):
         row_id, url, item_fmt, meta = item
         self._jobs_started += 1
 
-        thread = QThread(self)
+        # IMPORTANT: do NOT parent the QThread to ``self``. If the manager is
+        # destroyed (or a test exits) while the worker thread is still alive,
+        # Qt aborts the process. Letting the thread own its own lifetime via
+        # the deleteLater chain below is the documented safe pattern.
+        thread = QThread()
+        thread.setObjectName(f"DownloadJob[{row_id}]")
         job = DownloadJob(
             self._downloader,
             row_id=row_id,
@@ -365,10 +370,14 @@ class DownloadManager(QObject):
         job.progress.connect(lambda pct, rid=row_id: self._on_job_progress(rid, pct))
         job.log_event.connect(self.log_event)
         job.item_update.connect(self.item_update)
+        # Job-side completion: only update UI/progress. Pop+dispatch waits for
+        # the worker thread to actually exit so cleanup never races with the
+        # delete-later chain.
         job.finished.connect(self._on_job_finished)
 
         thread.started.connect(job.run)
         job.finished.connect(thread.quit)
+        thread.finished.connect(lambda rid=row_id: self._on_thread_finished(rid))
         job.finished.connect(job.deleteLater)
         thread.finished.connect(thread.deleteLater)
 
@@ -383,15 +392,34 @@ class DownloadManager(QObject):
 
     @Slot(str, str)
     def _on_job_finished(self, row_id: str, final_status: str):
+        """Surface progress and per-item status. Pop and dispatch wait for
+        the worker thread's own ``finished`` signal — see _on_thread_finished."""
         self._item_progress[row_id] = 100
-        self._running.pop(row_id, None)
         self._emit_progress()
         self.job_finished.emit(row_id, final_status)
 
+    def _on_thread_finished(self, row_id: str):
+        """Worker thread's event loop has fully exited — safe to pop + dispatch."""
+        self._running.pop(row_id, None)
         if self._pending and not self._paused:
             self._maybe_dispatch()
         else:
             self._maybe_wrap_up()
+
+    def shutdown(self, timeout_ms: int = 3000):
+        """Cancel everything and block until worker threads have exited.
+
+        Safe to call at any time. Tests use this in teardown; the window
+        calls it before closing so PyInstaller-bundled Windows builds don't
+        emit a 'QThread destroyed while running' message on exit.
+        """
+        for _, job in list(self._running.values()):
+            job.cancel()
+        self._pending.clear()
+        for thread, _ in list(self._running.values()):
+            thread.quit()
+            thread.wait(timeout_ms)
+        self._running.clear()
 
     def _emit_progress(self):
         if self._total == 0:
