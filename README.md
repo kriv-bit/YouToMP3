@@ -10,16 +10,6 @@ A portfolio-grade PySide6 desktop YouTube downloader with concurrent jobs, per-i
 [![Tests](https://img.shields.io/badge/tests-167%20passing-2EA043)](#)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 
-## Demo
-
-<!-- Replace this placeholder with a real recording: docs/demo.gif (or .mp4).
-     A 10–15 s clip — paste a URL → metadata appears → click DOWNLOAD →
-     file lands in the output folder — works best. -->
-
-![Demo placeholder](docs/screenshot-main.png)
-
-> _A recorded demo GIF will replace this image once captured. Until then the screenshot above gives a flavour of the workspace._
-
 ## Engineering highlights
 
 The codebase is intentionally small but tries to demonstrate the things a senior reviewer would look at:
