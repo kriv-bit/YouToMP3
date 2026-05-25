@@ -46,3 +46,17 @@ class AppSettings:
     def set_theme(self, theme: str):
         self.qs.setValue("ui/theme", "light" if theme == "light" else "dark")
 
+    def get_concurrency(self) -> int:
+        try:
+            n = int(self.qs.value("download/concurrency", 1))
+        except (TypeError, ValueError):
+            n = 1
+        return max(1, min(4, n))
+
+    def set_concurrency(self, n: int):
+        try:
+            value = max(1, min(4, int(n)))
+        except (TypeError, ValueError):
+            value = 1
+        self.qs.setValue("download/concurrency", value)
+

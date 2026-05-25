@@ -11,6 +11,10 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 
+class DownloadCancelled(Exception):
+    """Raised from inside the yt-dlp progress hook to abort the current download."""
+
+
 def clean_url(url: str) -> str:
     """Remove tracking params like ?si=... that sometimes cause weirdness."""
     u = url.strip()
