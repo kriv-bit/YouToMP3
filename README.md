@@ -2,6 +2,7 @@
 
 A PySide6 desktop YouTube audio downloader with queue management, embedded metadata, and a responsive desktop workflow.
 
+[![CI](https://github.com/kriv-bit/YouToMP3/actions/workflows/ci.yml/badge.svg)](https://github.com/kriv-bit/YouToMP3/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#)
 [![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?logo=qt&logoColor=white)](#)
 [![yt-dlp](https://img.shields.io/badge/Downloader-yt--dlp-111111)](#)
@@ -181,6 +182,36 @@ python -m app.main
 
 If everything is configured correctly, the desktop window should open and the app will be ready to use.
 
+## Development
+
+This project ships with a `pytest` suite that mocks `yt-dlp`, the network, and `mutagen`, so tests run offline in seconds and on any platform.
+
+### Install dev dependencies
+
+```powershell
+pip install -r requirements-dev.txt
+```
+
+### Run the test suite
+
+```powershell
+pytest
+```
+
+### Run with coverage
+
+```powershell
+pytest --cov=app --cov-report=term-missing
+```
+
+### Lint
+
+```powershell
+ruff check .
+```
+
+CI runs `ruff` plus the test suite on Ubuntu and Windows across Python 3.10–3.12 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Tagged releases (`v*`) trigger an automated Windows build that is attached to the GitHub Release — see [`.github/workflows/release.yml`](.github/workflows/release.yml).
+
 ## Build a Windows Executable
 
 You can package the app as a Windows `.exe` using PyInstaller.
@@ -241,9 +272,20 @@ YtoMp3/
 │       └── worker.py
 ├── assets/
 │   └── icon.ico
+├── tests/
+│   ├── conftest.py
+│   ├── test_clean_url.py
+│   ├── test_downloader.py
+│   ├── test_worker_helpers.py
+│   └── test_workers.py
+├── .github/workflows/
+│   ├── ci.yml
+│   └── release.yml
+├── pyproject.toml
 ├── requirements.txt
-├── LICENSE
-└── test_download.py
+├── requirements-dev.txt
+├── YouToMp3-Pro.spec
+└── LICENSE
 ```
 
 ## Technologies Used
