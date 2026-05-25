@@ -15,6 +15,7 @@ build/
 dist/
 *.egg-info/
 *.spec
+!YouToMp3-Pro.spec
 
 # Installer logs
 pip-log.txt
