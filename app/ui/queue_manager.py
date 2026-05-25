@@ -38,9 +38,13 @@ class QueueManager:
         self._t = t_fn
         self._can_modify_fn: Callable[[], bool] | None = None
         self._settings_set_fn: Callable | None = None
+        self._cancel_fn: Callable[[str], None] | None = None
         self._active_row_id: str | None = None
         self._theme = "dark"
         self._placeholder_icon = self._build_placeholder_icon()
+
+    def set_cancel_fn(self, fn: Callable[[str], None] | None):
+        self._cancel_fn = fn
 
     def set_t(self, t_fn: Callable[[str], str]):
         self._t = t_fn
@@ -132,7 +136,7 @@ class QueueManager:
 
         self._set_status_cell(row, status_key)
         self._set_progress_cell(row, pct)
-        self._add_delete_button(row, row_id)
+        self._add_delete_button(row, row_id, status_key)
 
         if auto_save and self._settings_set_fn:
             self.save(self._settings_set_fn)
@@ -189,7 +193,7 @@ class QueueManager:
         if out_file:
             self._set_thumbnail_cell(row, row_id=row_id, out_file=out_file)
 
-        self._add_delete_button(row, row_id)
+        self._add_delete_button(row, row_id, status_key)
 
         if self._settings_set_fn and (status_key in ("done", "error", "cancelled") or pct in (0, 100)):
             self.save(self._settings_set_fn)
@@ -234,7 +238,12 @@ class QueueManager:
     def refresh_action_buttons(self):
         for row in range(self._table.rowCount()):
             btn = self._table.cellWidget(row, 6)
-            if isinstance(btn, QToolButton):
+            if not isinstance(btn, QToolButton):
+                continue
+            if btn.objectName() == "RowCancelButton":
+                btn.setEnabled(True)
+                btn.setToolTip(self._t("cancel_row"))
+            else:
                 is_active = self._row_id_for_row(row) == self._active_row_id
                 btn.setEnabled(not is_active)
                 btn.setToolTip(
@@ -457,14 +466,25 @@ class QueueManager:
         if duration:
             item.setData(DURATION_ROLE, int(duration))
 
-    def _add_delete_button(self, row: int, row_id: str):
-        btn = self._table.cellWidget(row, 6)
-        if not isinstance(btn, QToolButton):
+    def _add_delete_button(self, row: int, row_id: str, status_key: str = "queued"):
+        existing = self._table.cellWidget(row, 6)
+        want_cancel = status_key == "downloading"
+        is_cancel = isinstance(existing, QToolButton) and existing.objectName() == "RowCancelButton"
+        is_delete = isinstance(existing, QToolButton) and existing.objectName() == "RowDeleteButton"
+
+        if want_cancel and not is_cancel:
+            btn = self._make_cancel_button(self._table, row_id)
+            btn.clicked.connect(lambda _=False, b=btn: self._cancel_row_from_button(b))
+            self._table.setCellWidget(row, 6, btn)
+        elif not want_cancel and not is_delete:
             btn = self._make_delete_button(self._table, row_id)
-            btn.clicked.connect(lambda: self._delete_row_from_button(btn))
+            btn.clicked.connect(lambda _=False, b=btn: self._delete_row_from_button(b))
             self._table.setCellWidget(row, 6, btn)
 
-        btn.setProperty("row_id", row_id)
+        installed = self._table.cellWidget(row, 6)
+        if isinstance(installed, QToolButton):
+            installed.setProperty("row_id", row_id)
+
         self.refresh_action_buttons()
 
     def _make_delete_button(self, parent, row_id: str) -> QToolButton:
@@ -474,11 +494,25 @@ class QueueManager:
         btn.setProperty("row_id", row_id)
         return btn
 
+    def _make_cancel_button(self, parent, row_id: str) -> QToolButton:
+        btn = QToolButton(parent)
+        btn.setText("◾")
+        btn.setObjectName("RowCancelButton")
+        btn.setProperty("row_id", row_id)
+        btn.setToolTip(self._t("cancel_row"))
+        return btn
+
     def _delete_row_from_button(self, btn: QToolButton):
         row_id = btn.property("row_id")
         if not row_id:
             return
         self.delete_row(row_id, parent=self._table)
+
+    def _cancel_row_from_button(self, btn: QToolButton):
+        row_id = btn.property("row_id")
+        if not row_id or not self._cancel_fn:
+            return
+        self._cancel_fn(row_id)
 
     def _delete_modal_row(self, btn: QToolButton, table: QTableWidget, parent) -> None:
         row_id = btn.property("row_id")

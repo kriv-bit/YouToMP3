@@ -507,6 +507,21 @@ def main_qss(theme: str = "dark") -> str:
             color: {c['TEXT_FAINT']};
         }}
 
+        QToolButton#RowCancelButton {{
+            background: transparent;
+            border: none;
+            color: {c['DANGER']};
+            font-size: 13px;
+            font-weight: 700;
+            padding: 0px;
+        }}
+
+        QToolButton#RowCancelButton:hover {{
+            color: {c['DANGER']};
+            background: rgba(255, 80, 80, 28);
+            border-radius: 4px;
+        }}
+
         QScrollBar:vertical {{
             background: {c['SURFACE_ALT']};
             width: 10px;

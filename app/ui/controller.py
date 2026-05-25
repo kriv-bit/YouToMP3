@@ -11,8 +11,9 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
 from app.ui.dialogs import AddPlaylistDialog, AddSongDialog, PasteBatchDialog
+from app.ui.download_manager import DownloadManager
 from app.ui.widgets import set_elided
-from app.ui.worker import DownloadWorker, PlaylistExpandWorker, QueueMetadataWorker
+from app.ui.worker import PlaylistExpandWorker, QueueMetadataWorker
 
 if TYPE_CHECKING:
     from app.ui.window import MainWindow
@@ -29,6 +30,19 @@ class MainController(QObject):
         self.win = win
         if not hasattr(self.win, "background_jobs"):
             self.win.background_jobs = []
+
+        self.download_manager = DownloadManager(self.win.downloader, parent=self)
+        self.win.download_manager = self.download_manager
+        self.download_manager.set_concurrency(self.win.settings.get_concurrency())
+        self.win.queue.set_cancel_fn(self.cancel_item)
+
+        self.download_manager.progress.connect(self._on_manager_progress)
+        self.download_manager.status_key.connect(self.set_status)
+        self.download_manager.log_event.connect(self.on_log_event)
+        self.download_manager.item_update.connect(self.on_item_update)
+        self.download_manager.finished.connect(self.on_worker_finished)
+        self.download_manager.job_started.connect(self.on_job_started)
+        self.download_manager.job_finished.connect(self.on_job_finished)
 
     # ---- helpers ----
 
@@ -54,6 +68,9 @@ class MainController(QObject):
         self.win.download_active = active
         self.win.download_btn.setEnabled(not active)
         self.win.download_btn.setText(self._t("downloading") if active else self._t("download"))
+        if hasattr(self.win, "pause_btn"):
+            self.win.pause_btn.setEnabled(active)
+            self.win.pause_btn.setText(self._t("pause"))
 
     def _start_metadata_lookup(self, jobs: list[tuple[str, str]]):
         if not jobs:
@@ -119,6 +136,9 @@ class MainController(QObject):
         if key == "downloading":
             self.win.status_value.setText(self._t("downloading"))
             self.win.status_value.setProperty("state", "downloading")
+        elif key == "paused":
+            self.win.status_value.setText(self._t("status_paused"))
+            self.win.status_value.setProperty("state", "paused")
         else:
             self.win.status_value.setText(self._t("idle"))
             self.win.status_value.setProperty("state", "idle")
@@ -241,7 +261,7 @@ class MainController(QObject):
     # ---- download orchestration ----
 
     def start_download(self):
-        """Start downloading all queued items via a background QThread."""
+        """Start the download manager on all currently queued rows."""
         if self.win.download_active:
             return
 
@@ -252,31 +272,37 @@ class MainController(QObject):
             QMessageBox.warning(self.win, self._t("no_urls_title"), self._t("no_queued_body"))
             return
 
-        items = queued
         fmt = self.win.format_box.currentText()
         q = self.win.quality_box.currentText()
 
         self._set_download_active(True)
-        self.set_status("downloading")
         self.win.progress_bar.setValue(0)
         self.win.queue.set_active_row(None)
+        self.download_manager.start(queued, fmt, q)
 
-        # Thread + worker
-        self.win.thread = QThread(self.win)
-        self.win.worker = DownloadWorker(self.win.downloader, items, fmt, q)
-        self.win.worker.moveToThread(self.win.thread)
+    def toggle_pause(self):
+        """Pause or resume the download queue based on current state."""
+        if not self.download_manager.is_running:
+            return
+        if self.download_manager.is_paused:
+            self.download_manager.resume()
+            if hasattr(self.win, "pause_btn"):
+                self.win.pause_btn.setText(self._t("pause"))
+        else:
+            self.download_manager.pause()
+            if hasattr(self.win, "pause_btn"):
+                self.win.pause_btn.setText(self._t("resume"))
 
-        self.win.thread.started.connect(self.win.worker.run)
-        self.win.worker.progress.connect(self.win.progress_bar.setValue)
-        self.win.worker.status_key.connect(self.set_status)
-        self.win.worker.log_event.connect(self.on_log_event)
-        self.win.worker.item_update.connect(self.on_item_update)
-        self.win.worker.finished.connect(self.win.thread.quit)
-        self.win.worker.finished.connect(self.win.worker.deleteLater)
-        self.win.thread.finished.connect(self.win.thread.deleteLater)
-        self.win.thread.finished.connect(self.on_worker_finished)
+    def cancel_item(self, row_id: str):
+        """Cancel a single queued or running item from the queue UI."""
+        if not row_id:
+            return
+        self.download_manager.cancel_item(row_id)
 
-        self.win.thread.start()
+    def set_concurrency(self, n: int):
+        """Persist concurrency setting and apply it to the live manager."""
+        self.win.settings.set_concurrency(n)
+        self.download_manager.set_concurrency(n)
 
     @Slot(object)
     def on_log_event(self, event: object):
@@ -349,6 +375,22 @@ class MainController(QObject):
         self.win.queue.save(self._settings_set)
         self.win.add_log(self._tf("playlist_items_added", count=count))
 
+    @Slot(int)
+    def _on_manager_progress(self, value: int):
+        """Forward overall progress from the manager to the progress bar."""
+        self.win.progress_bar.setValue(value)
+
+    @Slot(str)
+    def on_job_started(self, row_id: str):
+        """Mark the most-recently started row as active so it cannot be deleted."""
+        self.win.queue.set_active_row(row_id)
+
+    @Slot(str, str)
+    def on_job_finished(self, row_id: str, final_status: str):
+        """Clear the active row marker when no jobs remain in flight."""
+        if self.download_manager.active_count == 0:
+            self.win.queue.set_active_row(None)
+
     @Slot(str, str, int, str, str)
     def on_item_update(self, row_id: str, status_key: str, pct: int, title: str, out_file: str):
         """Route a Worker item_update signal to the queue manager."""
@@ -361,7 +403,7 @@ class MainController(QObject):
 
     @Slot()
     def on_worker_finished(self):
-        """Re-enable UI after the download thread finishes."""
+        """Re-enable UI after the download manager wraps up."""
         self._set_download_active(False)
         self.set_status("idle")
         self.win.queue.set_active_row(None)

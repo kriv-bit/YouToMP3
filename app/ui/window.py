@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QProgressBar,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QTableWidget,
     QTextEdit,
@@ -106,12 +107,24 @@ class MainWindow(QMainWindow):
 
         self.lang_label.setText(self._t("language"))
         self.theme_label.setText(self._t("theme"))
-        self.status_value.setText(self._t("idle") if self.status_key == "idle" else self._t("downloading"))
+        status_text_map = {
+            "downloading": "downloading",
+            "paused": "status_paused",
+            "idle": "idle",
+        }
+        self.status_value.setText(self._t(status_text_map.get(self.status_key, "idle")))
 
         if self.download_btn.isEnabled():
             self.download_btn.setText(self._t("download"))
         else:
             self.download_btn.setText(self._t("downloading"))
+
+        if hasattr(self, "concurrency_spin"):
+            self.concurrency_spin.setToolTip(self._t("concurrency_tooltip"))
+        if hasattr(self, "pause_btn") and hasattr(self, "download_manager"):
+            self.pause_btn.setText(
+                self._t("resume") if self.download_manager.is_paused else self._t("pause")
+            )
 
         if hasattr(self, "queue"):
             self.queue.set_t(self._t)
@@ -363,6 +376,26 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setObjectName("Progress")
         actions.addWidget(self.progress_bar, 1)
+
+        self.concurrency_label = QLabel()
+        self.concurrency_label.setObjectName("FieldLabel")
+        self._bind_text(self.concurrency_label, "concurrency")
+        actions.addWidget(self.concurrency_label)
+
+        self.concurrency_spin = QSpinBox()
+        self.concurrency_spin.setObjectName("ConcurrencySpin")
+        self.concurrency_spin.setRange(1, 4)
+        self.concurrency_spin.setValue(self.settings.get_concurrency())
+        self.concurrency_spin.setToolTip(self._t("concurrency_tooltip"))
+        self.concurrency_spin.valueChanged.connect(lambda n: self.ctrl.set_concurrency(n))
+        actions.addWidget(self.concurrency_spin)
+
+        self.pause_btn = QPushButton()
+        self.pause_btn.setObjectName("SecondaryButton")
+        self._bind_text(self.pause_btn, "pause")
+        self.pause_btn.setEnabled(False)
+        self.pause_btn.clicked.connect(lambda: self.ctrl.toggle_pause())
+        actions.addWidget(self.pause_btn)
 
         self.download_btn = QPushButton()
         self.download_btn.setObjectName("PrimaryButton")
