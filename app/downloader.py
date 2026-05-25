@@ -87,7 +87,16 @@ class MediaDownloader:
             },
         }
 
-    def download(self, url: str, format_type: str = "mp3", quality: str = "192", progress_callback=None):
+    def download(
+        self,
+        url: str,
+        format_type: str = "mp3",
+        quality: str = "192",
+        progress_callback=None,
+        *,
+        sponsorblock: bool = False,
+        trim: tuple[float, float] | None = None,
+    ):
         url = clean_url(url)
         base = self._base_opts(progress_callback=progress_callback)
 
@@ -106,6 +115,8 @@ class MediaDownloader:
                     "%(uploader|)s:%(meta_artist)s",
                 ],
             }
+            self._apply_sponsorblock(opts, enabled=sponsorblock)
+            self._apply_trim(opts, trim=trim)
             r = self._try_download_with_fallback(url, opts)
             return self._result_with_extension(r, "mp3", embed_artwork=True)
 
@@ -118,6 +129,8 @@ class MediaDownloader:
                     {"key": "FFmpegMetadata"},
                 ],
             }
+            self._apply_sponsorblock(opts, enabled=sponsorblock)
+            self._apply_trim(opts, trim=trim)
             r = self._try_download_with_fallback(url, opts)
             return self._result_with_extension(r, "m4a", embed_artwork=True)
 
@@ -130,6 +143,8 @@ class MediaDownloader:
                     {"key": "FFmpegMetadata"},
                 ],
             }
+            self._apply_sponsorblock(opts, enabled=sponsorblock)
+            self._apply_trim(opts, trim=trim)
             r = self._try_download_with_fallback(url, opts)
             return self._result_with_extension(r, "wav")
 
@@ -140,11 +155,53 @@ class MediaDownloader:
                 "merge_output_format": "mp4",
                 "postprocessors": [{"key": "FFmpegMetadata"}],
             }
+            self._apply_sponsorblock(opts, enabled=sponsorblock)
+            self._apply_trim(opts, trim=trim)
             r = self._try_download_with_fallback(url, opts)
             return self._result_with_extension(r, "mp4")
 
         else:
             raise ValueError(f"Unsupported format_type: {format_type}")
+
+    # Default categories pruned (kept low to avoid trimming legit content).
+    SPONSORBLOCK_CATEGORIES = ["sponsor", "selfpromo", "intro", "outro", "music_offtopic"]
+
+    def _apply_sponsorblock(self, opts: dict, *, enabled: bool):
+        if not enabled:
+            return
+        postprocessors = list(opts.get("postprocessors") or [])
+        postprocessors.insert(
+            0,
+            {
+                "key": "SponsorBlock",
+                "categories": list(self.SPONSORBLOCK_CATEGORIES),
+                "when": "pre_process",
+            },
+        )
+        postprocessors.append(
+            {
+                "key": "ModifyChapters",
+                "remove_sponsor_segments": list(self.SPONSORBLOCK_CATEGORIES),
+            }
+        )
+        opts["postprocessors"] = postprocessors
+
+    def _apply_trim(self, opts: dict, *, trim: tuple[float, float] | None):
+        if not trim:
+            return
+        start, end = trim
+        if start is None and end is None:
+            return
+        section = {
+            "start_time": float(start) if start is not None else 0.0,
+            "end_time": float(end) if end is not None else None,
+        }
+
+        def _ranges(_info, _ydl):
+            return [section]
+
+        opts["download_ranges"] = _ranges
+        opts["force_keyframes_at_cuts"] = True
 
     def get_info(self, url: str, *, allow_playlist: bool = False) -> dict:
         """Fetch metadata without downloading."""
