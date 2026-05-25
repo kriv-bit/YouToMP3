@@ -37,6 +37,7 @@ class DownloadJob(QObject):
         *,
         index: int = 0,
         total: int = 0,
+        sponsorblock: bool = False,
     ):
         super().__init__()
         self._downloader = downloader
@@ -47,6 +48,7 @@ class DownloadJob(QObject):
         self._meta = dict(meta or {})
         self._index = index
         self._total = total
+        self._sponsorblock = bool(sponsorblock)
 
         self._cancelled = False
         self._current_title = str(self._meta.get("title") or "")
@@ -134,11 +136,14 @@ class DownloadJob(QObject):
 
             self.item_update.emit(self._row_id, "downloading", 0, title, "")
 
+            trim = self._extract_trim()
             result = self._downloader.download(
                 self._url,
                 format_type=self._fmt,
                 quality=self._quality,
                 progress_callback=self.hook,
+                sponsorblock=self._sponsorblock,
+                trim=trim,
             )
 
             out_file = ""
@@ -181,6 +186,13 @@ class DownloadJob(QObject):
         )
         self.finished.emit(self._row_id, "cancelled")
 
+    def _extract_trim(self) -> tuple[float, float] | None:
+        start = self._meta.get("trim_start")
+        end = self._meta.get("trim_end")
+        if start is None and end is None:
+            return None
+        return (start, end)
+
 
 class DownloadManager(QObject):
     """Schedules concurrent DownloadJob workers and aggregates their signals."""
@@ -199,6 +211,7 @@ class DownloadManager(QObject):
         self._concurrency = 1
         self._paused = False
         self._running_anything = False
+        self._sponsorblock = False
 
         self._fmt = "mp3"
         self._quality = "192"
@@ -208,6 +221,13 @@ class DownloadManager(QObject):
         self._item_progress: dict[str, int] = {}
         self._total = 0
         self._jobs_started = 0
+
+    def set_sponsorblock_enabled(self, enabled: bool):
+        self._sponsorblock = bool(enabled)
+
+    @property
+    def sponsorblock_enabled(self) -> bool:
+        return self._sponsorblock
 
     # ---- public API ----
 
@@ -338,6 +358,7 @@ class DownloadManager(QObject):
             meta=meta,
             index=self._jobs_started,
             total=self._total,
+            sponsorblock=self._sponsorblock,
         )
         job.moveToThread(thread)
 

@@ -34,6 +34,9 @@ class MainController(QObject):
         self.download_manager = DownloadManager(self.win.downloader, parent=self)
         self.win.download_manager = self.download_manager
         self.download_manager.set_concurrency(self.win.settings.get_concurrency())
+        self.download_manager.set_sponsorblock_enabled(
+            self.win.settings.get_sponsorblock_enabled()
+        )
         self.win.queue.set_cancel_fn(self.cancel_item)
 
         self.download_manager.progress.connect(self._on_manager_progress)
@@ -159,6 +162,11 @@ class MainController(QObject):
         if not url:
             return
 
+        try:
+            trim_start, trim_end = dlg.trim()
+        except Exception:
+            trim_start, trim_end = None, None
+
         fmt = self.win.format_box.currentText()
         row_id = self.win.queue.add_row(
             url=url,
@@ -167,6 +175,8 @@ class MainController(QObject):
             status_key="queued",
             pct=0,
             settings_set_fn=self._settings_set,
+            trim_start=trim_start,
+            trim_end=trim_end,
         )
         self._start_metadata_lookup([(row_id, url)])
 

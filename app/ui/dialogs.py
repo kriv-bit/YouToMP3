@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.timestamp import TimestampError, parse_timestamp, validate_range
+
 
 class _BaseDialog(QDialog):
     """Shared dialog scaffold with header, body, and action row."""
@@ -72,12 +74,12 @@ class _BaseDialog(QDialog):
 
 
 class AddSongDialog(_BaseDialog):
-    """Modal dialog to add a single song URL to the queue."""
+    """Modal dialog to add a single song URL to the queue, optionally trimmed."""
 
     def __init__(self, parent=None, t=lambda k, **kw: k):
         super().__init__(parent, t=t)
         self.setWindowTitle(self.t("add_song"))
-        self.resize(560, 220)
+        self.resize(560, 320)
 
         lay = self._build_shell(self.t("add_song"), self.t("enter_url"))
 
@@ -89,8 +91,70 @@ class AddSongDialog(_BaseDialog):
         self.url_edit.setPlaceholderText(self.t("enter_url"))
         lay.addWidget(self.url_edit)
 
+        trim_panel = QWidget()
+        trim_panel.setObjectName("FormPanel")
+        trim_layout = QVBoxLayout(trim_panel)
+        trim_layout.setContentsMargins(14, 14, 14, 14)
+        trim_layout.setSpacing(8)
+
+        trim_title = QLabel(self.t("trim_section_title"))
+        trim_title.setObjectName("FormLabel")
+        trim_layout.addWidget(trim_title)
+
+        hint = QLabel(self.t("trim_hint"))
+        hint.setObjectName("DialogSubtitle")
+        hint.setWordWrap(True)
+        trim_layout.addWidget(hint)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+
+        start_lbl = QLabel(self.t("trim_start"))
+        start_lbl.setObjectName("FormLabel")
+        row.addWidget(start_lbl)
+        self.start_edit = QLineEdit()
+        self.start_edit.setPlaceholderText("0:30")
+        self.start_edit.setMaximumWidth(120)
+        row.addWidget(self.start_edit)
+
+        end_lbl = QLabel(self.t("trim_end"))
+        end_lbl.setObjectName("FormLabel")
+        row.addWidget(end_lbl)
+        self.end_edit = QLineEdit()
+        self.end_edit.setPlaceholderText("1:30")
+        self.end_edit.setMaximumWidth(120)
+        row.addWidget(self.end_edit)
+
+        row.addStretch(1)
+        trim_layout.addLayout(row)
+
+        self.trim_error = QLabel("")
+        self.trim_error.setObjectName("DialogError")
+        self.trim_error.setStyleSheet("color: #D86D6D;")
+        self.trim_error.setWordWrap(True)
+        self.trim_error.hide()
+        trim_layout.addWidget(self.trim_error)
+
+        lay.addWidget(trim_panel)
+
     def url(self) -> str:
         return self.url_edit.text().strip()
+
+    def trim(self) -> tuple[float | None, float | None]:
+        """Return ``(start, end)`` in seconds or raise :class:`TimestampError`."""
+        start = parse_timestamp(self.start_edit.text())
+        end = parse_timestamp(self.end_edit.text())
+        return validate_range(start, end)
+
+    def accept(self):
+        try:
+            self.trim()
+        except TimestampError as exc:
+            self.trim_error.setText(self.t("trim_invalid").format(error=str(exc)))
+            self.trim_error.show()
+            return
+        self.trim_error.hide()
+        super().accept()
 
 
 class AddPlaylistDialog(_BaseDialog):

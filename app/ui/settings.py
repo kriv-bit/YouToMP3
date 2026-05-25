@@ -60,3 +60,12 @@ class AppSettings:
             value = 1
         self.qs.setValue("download/concurrency", value)
 
+    def get_sponsorblock_enabled(self) -> bool:
+        raw = self.qs.value("download/sponsorblock", False)
+        if isinstance(raw, bool):
+            return raw
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+    def set_sponsorblock_enabled(self, enabled: bool):
+        self.qs.setValue("download/sponsorblock", bool(enabled))
+

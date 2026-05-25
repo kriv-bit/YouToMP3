@@ -27,6 +27,8 @@ OUTPUT_ROLE = int(Qt.UserRole) + 11
 THUMBNAIL_URL_ROLE = int(Qt.UserRole) + 12
 UPLOADER_ROLE = int(Qt.UserRole) + 13
 DURATION_ROLE = int(Qt.UserRole) + 14
+TRIM_START_ROLE = int(Qt.UserRole) + 15
+TRIM_END_ROLE = int(Qt.UserRole) + 16
 IS_PLACEHOLDER_ROLE = int(Qt.UserRole) + 20
 
 
@@ -109,6 +111,8 @@ class QueueManager:
         uploader: str = "",
         duration: int | None = None,
         row_id: str | None = None,
+        trim_start: float | None = None,
+        trim_end: float | None = None,
     ) -> str:
         if settings_set_fn:
             self._settings_set_fn = settings_set_fn
@@ -136,6 +140,7 @@ class QueueManager:
 
         self._set_status_cell(row, status_key)
         self._set_progress_cell(row, pct)
+        self._set_trim_data(row, trim_start, trim_end)
         self._add_delete_button(row, row_id, status_key)
 
         if auto_save and self._settings_set_fn:
@@ -295,6 +300,8 @@ class QueueManager:
                     "thumbnail": meta.get("thumbnail", ""),
                     "uploader": meta.get("uploader", ""),
                     "duration": meta.get("duration"),
+                    "trim_start": meta.get("trim_start"),
+                    "trim_end": meta.get("trim_end"),
                 }
             )
 
@@ -324,6 +331,8 @@ class QueueManager:
                 uploader=item.get("uploader", ""),
                 duration=item.get("duration"),
                 row_id=item.get("row_id") or None,
+                trim_start=item.get("trim_start"),
+                trim_end=item.get("trim_end"),
             )
 
     def open_modal(self, parent):
@@ -435,7 +444,16 @@ class QueueManager:
             "thumbnail": item.data(THUMBNAIL_URL_ROLE) or "",
             "uploader": item.data(UPLOADER_ROLE) or "",
             "duration": item.data(DURATION_ROLE),
+            "trim_start": item.data(TRIM_START_ROLE),
+            "trim_end": item.data(TRIM_END_ROLE),
         }
+
+    def _set_trim_data(self, row: int, start: float | None, end: float | None):
+        item = self._table.item(row, 0)
+        if item is None:
+            return
+        item.setData(TRIM_START_ROLE, float(start) if start is not None else None)
+        item.setData(TRIM_END_ROLE, float(end) if end is not None else None)
 
     def _output_path_for_row(self, row: int) -> str:
         item = self._table.item(row, 5)

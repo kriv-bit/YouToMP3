@@ -7,6 +7,7 @@ from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt
 from PySide6.QtGui import QFont, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFrame,
     QGraphicsOpacityEffect,
@@ -367,6 +368,15 @@ class MainWindow(QMainWindow):
             self.quality_box.setCurrentText("192")
         self.quality_box.currentTextChanged.connect(self._on_quality_change)
         format_layout.addWidget(self.quality_box)
+
+        self.sponsorblock_chk = QCheckBox()
+        self.sponsorblock_chk.setObjectName("SponsorBlockToggle")
+        self._bind_text(self.sponsorblock_chk, "sponsorblock_label")
+        self.sponsorblock_chk.setChecked(self.settings.get_sponsorblock_enabled())
+        self.sponsorblock_chk.setToolTip(self._t("sponsorblock_tooltip"))
+        self.sponsorblock_chk.toggled.connect(self._on_sponsorblock_toggled)
+        format_layout.addWidget(self.sponsorblock_chk)
+
         layout.addWidget(format_group)
 
         output_group = self._make_sidebar_group("output_group_title", "output_group_subtitle")
@@ -768,6 +778,11 @@ class MainWindow(QMainWindow):
 
     def _on_quality_change(self, quality: str):
         self.settings.set_quality(quality)
+
+    def _on_sponsorblock_toggled(self, enabled: bool):
+        self.settings.set_sponsorblock_enabled(enabled)
+        if hasattr(self, "download_manager"):
+            self.download_manager.set_sponsorblock_enabled(enabled)
 
     def add_log(self, text: str):
         self.log_box.append(text)
