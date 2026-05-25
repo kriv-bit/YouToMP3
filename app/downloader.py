@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
-from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
-from mutagen.id3 import APIC, ID3, ID3NoHeaderError, TALB, TIT2, TPE1
+from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1, ID3NoHeaderError
 from mutagen.mp4 import MP4, MP4Cover
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError

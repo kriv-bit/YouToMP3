@@ -1,6 +1,7 @@
-from PySide6.QtWidgets import QGraphicsDropShadowEffect, QLabel
-from PySide6.QtGui import QColor, QFontMetrics
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFontMetrics
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QLabel
+
 
 def add_shadow(widget, color_hex="#00D4FF", blur=22, x=0, y=6, alpha=70):
     eff = QGraphicsDropShadowEffect()

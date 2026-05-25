@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QUrl
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPixmap

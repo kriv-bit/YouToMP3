@@ -10,9 +10,9 @@ from PySide6.QtCore import QObject, QThread, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
-from app.ui.dialogs import AddSongDialog, AddPlaylistDialog, PasteBatchDialog
-from app.ui.worker import DownloadWorker, PlaylistExpandWorker, QueueMetadataWorker
+from app.ui.dialogs import AddPlaylistDialog, AddSongDialog, PasteBatchDialog
 from app.ui.widgets import set_elided
+from app.ui.worker import DownloadWorker, PlaylistExpandWorker, QueueMetadataWorker
 
 if TYPE_CHECKING:
     from app.ui.window import MainWindow

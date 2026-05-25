@@ -1,5 +1,7 @@
 import os
+
 from PySide6.QtCore import QSettings
+
 
 class AppSettings:
     def __init__(self):

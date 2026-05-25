@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import Callable
+from collections.abc import Callable
+from pathlib import Path
 from uuid import uuid4
 
-from pathlib import Path
-
-from PySide6.QtCore import QPoint, Qt, QSize
+from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap, QPolygon
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -21,7 +20,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from app.ui.style import status_colors, queue_placeholder_colors
+from app.ui.style import queue_placeholder_colors, status_colors
 
 ROW_ID_ROLE = int(Qt.UserRole) + 10
 OUTPUT_ROLE = int(Qt.UserRole) + 11
