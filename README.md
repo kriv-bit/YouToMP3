@@ -1,330 +1,216 @@
 # YouToMp3 Pro
 
-A PySide6 desktop YouTube audio downloader with queue management, embedded metadata, and a responsive desktop workflow.
+A portfolio-grade PySide6 desktop YouTube downloader with concurrent jobs, per-item cancel, SponsorBlock, audio trim, system tray, drag &amp; drop and a fully mocked test suite.
 
 [![CI](https://github.com/kriv-bit/YouToMP3/actions/workflows/ci.yml/badge.svg)](https://github.com/kriv-bit/YouToMP3/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kriv-bit/YouToMP3?display_name=tag&logo=github)](https://github.com/kriv-bit/YouToMP3/releases/latest)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#)
 [![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?logo=qt&logoColor=white)](#)
 [![yt-dlp](https://img.shields.io/badge/Downloader-yt--dlp-111111)](#)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563)](#)
+[![Tests](https://img.shields.io/badge/tests-167%20passing-2EA043)](#)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Status](https://img.shields.io/badge/Status-Active%20Development-0A7F5A)](#)
 
-## Download
+## Demo
 
-Download the Windows build from the assets section of this release:
+<!-- Replace this placeholder with a real recording: docs/demo.gif (or .mp4).
+     A 10–15 s clip — paste a URL → metadata appears → click DOWNLOAD →
+     file lands in the output folder — works best. -->
 
-https://github.com/kriv-bit/YouToMP3/releases/latest
+![Demo placeholder](docs/screenshot-main.png)
 
-After downloading:
+> _A recorded demo GIF will replace this image once captured. Until then the screenshot above gives a flavour of the workspace._
 
-1. Extract the zip file
-2. Open the extracted folder
-3. Make sure you have FFmpeg installed
-4. Run YouToMp3-Pro.exe
-   
-## Overview
+## Engineering highlights
 
-YouToMp3 Pro is a desktop application for downloading audio from YouTube and other `yt-dlp` compatible sources through a native PySide6 interface. It is designed as a practical desktop tool rather than a one-off script: you can queue multiple items, add full playlists, monitor live progress, review console logs, and keep the interface responsive while metadata and playlist items are being resolved in the background.
+The codebase is intentionally small but tries to demonstrate the things a senior reviewer would look at:
 
-The project focuses on a polished desktop workflow with real operational features, including title resolution as items are added, thumbnail previews in the queue, metadata and cover embedding when supported, and safeguards that prevent users from removing the item currently being downloaded.
+- **Concurrent download pipeline** — a coordinator (`DownloadManager`) dispatches up to four `DownloadJob` workers on separate `QThread`s with cooperative cancellation through the yt-dlp progress hook, queue-level pause/resume, and aggregated overall progress.
+- **Decoupled architecture** — `MediaDownloader` (pure logic over yt-dlp / mutagen / Pillow) is fully decoupled from PySide6; the UI orchestrates it through a thin `MainController` and Qt signals.
+- **Real test suite, no network** — 167 pytest cases. `yt-dlp`, HTTP, `mutagen`, the clipboard and `QSystemTrayIcon` are all mocked; the suite runs offline in &lt;5&nbsp;s.
+- **CI &amp; release automation** — GitHub Actions runs `ruff` + `pytest` on Ubuntu and Windows across Python 3.10–3.12, and tagged releases (`v*`) trigger an automated PyInstaller build attached to the GitHub Release.
+- **Desktop-native UX** — drag &amp; drop URLs, clipboard auto-detection with a non-modal `FlashBar`, system tray with native completion toasts, persistent dark/light theme, EN/ES i18n and an offscreen-safe layout for headless tests.
+- **Useful product features** — SponsorBlock segment removal, per-item audio trim (`SS` / `MM:SS` / `HH:MM:SS`), thumbnail and ID3v3 metadata embedding, playlist expansion with deduplication, and a queue that survives app restart.
 
 ## Features
 
-- Download a single video directly from a URL
-- Add playlists as a batch or expand them into individual queue items
-- Export audio as `mp3`, `m4a`, or `wav`
-- Embed metadata into supported output formats
-- Embed thumbnails into supported output formats
-- Resolve video titles early when items are added to the queue
-- Show thumbnail artwork directly in the queue table
-- Display live progress while downloads are running
-- Keep the UI responsive during playlist processing
-- Review download events and errors in a built-in console log
-- Manage a queue of pending and completed items
-- Prevent accidental removal of the item currently being downloaded
-- Store output files in a user-selected folder
+User-facing capabilities, grouped:
+
+| Area | Capabilities |
+|---|---|
+| **Sources** | Single URL, full playlists (lazy or pre-expanded), drag &amp; drop, clipboard auto-detect, paste-batch |
+| **Output** | MP3 / M4A / WAV (configurable bitrate) and MP4; embedded ID3v3 / iTunes tags and cover art |
+| **Workflow** | 1–4 concurrent downloads, pause / resume the queue, cancel an individual item, prevent deletion of running rows, queue persists across restarts |
+| **Trimming** | Per-item start / end timestamps with keyframe-aligned cuts |
+| **SponsorBlock** | Toggle to remove sponsor / self-promo / intro / outro / music-offtopic segments |
+| **Polish** | Light &amp; dark theme, EN / ES translations, system tray with completion toasts, console log, status indicator |
 
 ## Screenshots
 
-### Main Window
+| Main workspace | Queue with thumbnails | Add a playlist |
+| --- | --- | --- |
+| ![Main Window](docs/screenshot-main.png) | ![Queue View](docs/screenshot-queue.png) | ![Playlist Dialog](docs/screenshot-playlist.png) |
 
-![Main Window](docs/screenshot-main.png)
+## Architecture
 
-### Queue and Metadata
+```mermaid
+flowchart LR
+    User([User])
 
-![Queue View](docs/screenshot-queue.png)
+    subgraph UI[PySide6 UI]
+        MW[MainWindow]
+        FB[FlashBar]
+        TR[Tray Icon]
+        QM[QueueManager]
+        DM[DownloadManager]
+    end
 
-### Playlist Dialog
+    subgraph Bg[Background QThreads]
+        QMW[QueueMetadataWorker]
+        PEW[PlaylistExpandWorker]
+        DJ[DownloadJob × N]
+    end
 
-![Playlist Workflow](docs/screenshot-playlist.png)
+    subgraph Core[Pure Python core]
+        DL[MediaDownloader]
+    end
 
-## Installation
+    External1[yt-dlp]
+    External2[FFmpeg]
+    External3[mutagen + Pillow]
 
-### Windows
+    User -->|drag &amp; drop / paste / clipboard| MW
+    MW --> FB
+    MW --> TR
+    MW --> QM
+    MW --> DM
+    DM -->|spawn| DJ
+    MW -->|metadata lookup| QMW
+    MW -->|playlist expand| PEW
+    DJ --> DL
+    QMW --> DL
+    PEW --> DL
+    DL --> External1
+    DL --> External2
+    DL --> External3
+```
 
-This project is currently aimed primarily at Windows, but Linux and macOS users can still run it from source if Python, Qt, and FFmpeg are available in their environment.
+A copy of the same flow in prose:
 
-### 1. Install Python
+1. **`MainWindow`** wires three lightweight UI helpers (`FlashBar` for clipboard prompts, `AppTrayIcon` for native toasts, `QueueManager` for the table) and a single long-lived **`DownloadManager`**.
+2. The user adds URLs through dialogs, drag &amp; drop, or the clipboard watcher; each row gets a background **metadata lookup** so titles and thumbnails appear before the actual download.
+3. On *Download*, the manager pops items off the queue and runs them through **`DownloadJob`** workers (1–4 in parallel). Each job lives on its own `QThread` with a cancel flag and an aggregated progress feed.
+4. **`MediaDownloader`** is the only module that talks to `yt-dlp`. It composes format-specific postprocessor chains (audio extract, metadata, optional SponsorBlock + ModifyChapters, optional `download_ranges` for trim) and falls back across YouTube player clients on 403s.
+5. After download, **mutagen + Pillow** normalize the tags and embed a square JPEG cover.
 
-Install **Python 3.10 or newer** from the official Python website.
+## Install &amp; run
 
-During installation on Windows:
+### Pre-built Windows binary
 
-- Enable `Add python.exe to PATH`
-- Keep `pip` enabled
-- Recommended: install for the current user unless you need a system-wide setup
+Grab the latest `.zip` from [Releases](https://github.com/kriv-bit/YouToMP3/releases/latest), extract it, make sure **FFmpeg** is on `PATH`, and run `YouToMp3-Pro.exe`.
 
-Verify the installation:
+### From source (any OS)
 
 ```powershell
+# 1. Python 3.10+
 python --version
-pip --version
-```
 
-### 2. Clone the Repository
+# 2. Clone
+git clone https://github.com/kriv-bit/YouToMP3.git
+cd YouToMP3
 
-```powershell
-git clone <your-repository-url>
-cd YtoMp3
-```
-
-### 3. Create and Activate a Virtual Environment
-
-```powershell
+# 3. Virtual env
 python -m venv .venv
-.venv\Scripts\activate
-```
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
 
-### 4. Install Python Dependencies
-
-```powershell
+# 4. Install
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
 
-This installs the main Python dependencies used by the app, including:
-
-- `PySide6` for the desktop UI
-- `yt-dlp` for extracting and downloading media
-- `mutagen` for metadata handling
-
-## yt-dlp Setup
-
-`yt-dlp` is already included in [`requirements.txt`](requirements.txt), so you do **not** need to install it separately for normal use.
-
-If you want to manually update it later, you can run:
-
-```powershell
-python -m pip install -U yt-dlp
-```
-
-## FFmpeg Setup on Windows
-
-FFmpeg is required for audio conversion, metadata processing, and thumbnail embedding.
-
-### 1. Download FFmpeg
-
-Download a Windows FFmpeg build from the official FFmpeg download page and choose a Windows release package in `.zip` format.
-
-### 2. Extract FFmpeg
-
-Extract the archive to a stable location such as:
-
-```text
-C:\ffmpeg
-```
-
-After extraction, you should have a structure similar to:
-
-```text
-C:\ffmpeg
-└── bin
-    ├── ffmpeg.exe
-    ├── ffprobe.exe
-    └── ffplay.exe
-```
-
-### 3. Add FFmpeg to PATH
-
-1. Open the Windows Start menu
-2. Search for `Environment Variables`
-3. Open `Edit the system environment variables`
-4. Click `Environment Variables...`
-5. Under `User variables` or `System variables`, select `Path`
-6. Click `Edit`
-7. Click `New`
-8. Add:
-
-```text
-C:\ffmpeg\bin
-```
-
-9. Confirm all dialogs with `OK`
-10. Close and reopen your terminal
-
-### 4. Verify FFmpeg
-
-```powershell
-ffmpeg -version
-where ffmpeg
-```
-
-If both commands work, FFmpeg is available to the app.
-
-## Run from Source
-
-From the project root:
-
-```powershell
+# 5. Run
 python -m app.main
 ```
 
-If everything is configured correctly, the desktop window should open and the app will be ready to use.
+`yt-dlp` and `mutagen` come from `requirements.txt`. **FFmpeg** must be installed separately and reachable on `PATH` — see [FFmpeg setup](#ffmpeg-setup-windows) below for Windows.
+
+### FFmpeg setup (Windows)
+
+1. Download an FFmpeg Windows build (`.zip`) from the official site.
+2. Extract to a stable folder, e.g. `C:\ffmpeg`. You should now have `C:\ffmpeg\bin\ffmpeg.exe`.
+3. Add `C:\ffmpeg\bin` to `Path` (System Properties → Environment Variables).
+4. Open a fresh terminal and verify with `ffmpeg -version`.
 
 ## Development
 
-This project ships with a `pytest` suite that mocks `yt-dlp`, the network, and `mutagen`, so tests run offline in seconds and on any platform.
-
-### Install dev dependencies
+The test suite runs offline thanks to mocks for yt-dlp, HTTP and mutagen.
 
 ```powershell
 pip install -r requirements-dev.txt
+
+pytest                          # 167 tests, &lt;5 s
+pytest --cov=app                # with coverage
+ruff check .                    # lint
 ```
 
-### Run the test suite
+CI is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). A tag push (`v1.0.0`, `v1.1.0`, …) triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) which builds the Windows executable with PyInstaller and attaches it to the GitHub Release.
+
+### Build a Windows executable locally
 
 ```powershell
-pytest
+pip install pyinstaller
+pyinstaller --noconfirm YouToMp3-Pro.spec
+# → dist\YouToMp3-Pro\YouToMp3-Pro.exe
 ```
 
-### Run with coverage
-
-```powershell
-pytest --cov=app --cov-report=term-missing
-```
-
-### Lint
-
-```powershell
-ruff check .
-```
-
-CI runs `ruff` plus the test suite on Ubuntu and Windows across Python 3.10–3.12 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Tagged releases (`v*`) trigger an automated Windows build that is attached to the GitHub Release — see [`.github/workflows/release.yml`](.github/workflows/release.yml).
-
-## Build a Windows Executable
-
-You can package the app as a Windows `.exe` using PyInstaller.
-
-### 1. Install PyInstaller
-
-```powershell
-python -m pip install pyinstaller
-```
-
-### 2. Build the App
-
-From the project root:
-
-```powershell
-pyinstaller --noconfirm --windowed --name "YouToMp3-Pro" --icon assets/icon.ico --add-data "assets;assets" app/main.py
-```
-
-### 3. Output
-
-After a successful build, the executable will be available in:
-
-```text
-dist\YouToMp3-Pro\
-```
-
-Typical entry point:
-
-```text
-dist\YouToMp3-Pro\YouToMp3-Pro.exe
-```
-
-### Notes
-
-- The command above uses a **one-folder** build, which is usually the most reliable option for PySide6 desktop apps.
-- If you want a single-file executable, you can experiment with `--onefile`, but startup time and packaging complexity may increase.
-- If you build on Linux or macOS, PyInstaller uses a different `--add-data` separator:
-- Windows: `assets;assets`
-- Linux/macOS: `assets:assets`
-
-## Project Structure
+## Project structure
 
 ```text
 YtoMp3/
 ├── app/
 │   ├── main.py
-│   ├── downloader.py
+│   ├── downloader.py            # yt-dlp orchestration + tag/artwork embedding
+│   ├── timestamp.py             # SS / MM:SS / HH:MM:SS parsing for trim
 │   └── ui/
-│       ├── controller.py
-│       ├── dialogs.py
-│       ├── i18n.py
-│       ├── now_downloading.py
-│       ├── queue_manager.py
-│       ├── settings.py
-│       ├── style.py
-│       ├── widgets.py
-│       ├── window.py
-│       └── worker.py
-├── assets/
-│   └── icon.ico
-├── tests/
-│   ├── conftest.py
-│   ├── test_clean_url.py
-│   ├── test_downloader.py
-│   ├── test_worker_helpers.py
-│   └── test_workers.py
-├── .github/workflows/
-│   ├── ci.yml
-│   └── release.yml
-├── pyproject.toml
+│       ├── window.py            # MainWindow, layout, drag&amp;drop, tray wiring
+│       ├── controller.py        # MainController — dialogs, queue actions
+│       ├── download_manager.py  # DownloadManager + DownloadJob
+│       ├── worker.py            # QueueMetadataWorker, PlaylistExpandWorker
+│       ├── queue_manager.py     # Table model + persistence
+│       ├── clipboard_watcher.py # YT URL detection
+│       ├── flash_bar.py         # Non-modal toast banner
+│       ├── tray.py              # QSystemTrayIcon + native toasts
+│       ├── dialogs.py           # Add song / playlist / batch
+│       ├── now_downloading.py   # "Now downloading" card
+│       ├── settings.py          # AppSettings (QSettings wrapper)
+│       ├── style.py             # QSS for light/dark themes
+│       ├── i18n.py              # EN / ES translations
+│       └── widgets.py           # Tiny UI helpers
+├── tests/                       # 167 pytest cases (offline, mocked)
+├── .github/workflows/           # CI + release pipelines
+├── assets/icon.ico
+├── docs/                        # Screenshots and demo media
+├── pyproject.toml               # pytest / coverage / ruff config
 ├── requirements.txt
 ├── requirements-dev.txt
-├── YouToMp3-Pro.spec
+├── YouToMp3-Pro.spec            # PyInstaller spec
 └── LICENSE
 ```
 
-## Technologies Used
+## Tech stack
 
-- **Python** for the application logic
+- **Python 3.10+**
 - **PySide6** for the native desktop UI
-- **yt-dlp** for media extraction and downloading
-- **FFmpeg** for conversion, post-processing, and embedding
-- **Mutagen** for audio metadata handling
-- **PyInstaller** for Windows packaging
-
-## Why This Project Exists
-
-This project was built as a portfolio-grade desktop application that goes beyond a basic downloader script. It demonstrates:
-
-- practical PySide6 desktop application architecture
-- queue-based workflows for real user tasks
-- background threading with signal/slot-safe UI updates
-- metadata and media-processing integration
-- thoughtful desktop UX decisions such as responsive playlist handling and active-row protection
-- maintainable separation between UI, controller logic, workers, and download services
-
-For a portfolio, it is valuable because it combines product thinking, native desktop UI work, threading, media tooling, and packaging into one cohesive project.
+- **yt-dlp** for extraction, transcoding pipeline and SponsorBlock / ModifyChapters postprocessors
+- **mutagen** + **Pillow** for tag normalization and cover embedding
+- **pytest** + **pytest-qt** + **pytest-cov** for the test suite
+- **ruff** for linting
+- **PyInstaller** for the Windows build
+- **GitHub Actions** for CI and automated releases
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0**.
+GPLv3 — see [`LICENSE`](./LICENSE).
 
-See the full license in [`LICENSE`](./LICENSE).
+## Responsible use
 
-## Responsible Use
-
-This software is provided for lawful and responsible use only.
-
-Please make sure that you:
-
-- only download content you own or have permission to download
-- comply with local laws and copyright regulations
-- respect the terms of service of the platforms you use
-- avoid using the application for unauthorized distribution of protected material
-
-The author does not endorse misuse of this project.
+This software is provided for lawful and responsible use only. Please only download content you own or have explicit permission to download, comply with local copyright laws, and respect each platform's terms of service. The author does not endorse misuse of this project.
