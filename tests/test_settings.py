@@ -42,3 +42,24 @@ class TestConcurrency:
     def test_handles_non_integer_stored(self, _isolate_settings: AppSettings) -> None:
         _isolate_settings.qs.setValue("download/concurrency", "garbage")
         assert _isolate_settings.get_concurrency() == 1
+
+
+class TestSponsorBlock:
+    def test_default_disabled(self, _isolate_settings: AppSettings) -> None:
+        assert _isolate_settings.get_sponsorblock_enabled() is False
+
+    def test_round_trip(self, _isolate_settings: AppSettings) -> None:
+        _isolate_settings.set_sponsorblock_enabled(True)
+        assert _isolate_settings.get_sponsorblock_enabled() is True
+        _isolate_settings.set_sponsorblock_enabled(False)
+        assert _isolate_settings.get_sponsorblock_enabled() is False
+
+    def test_parses_string_true(self, _isolate_settings: AppSettings) -> None:
+        for raw in ("true", "True", "1", "yes", "on"):
+            _isolate_settings.qs.setValue("download/sponsorblock", raw)
+            assert _isolate_settings.get_sponsorblock_enabled() is True
+
+    def test_parses_string_false(self, _isolate_settings: AppSettings) -> None:
+        for raw in ("false", "0", "no", "", "garbage"):
+            _isolate_settings.qs.setValue("download/sponsorblock", raw)
+            assert _isolate_settings.get_sponsorblock_enabled() is False

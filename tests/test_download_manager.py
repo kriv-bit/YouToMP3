@@ -118,6 +118,47 @@ class TestDownloadJob:
             job.run()
         assert any(e.get("key") == "artwork_warning" for e in log_events)
 
+    def test_passes_sponsorblock_flag_to_downloader(self, qtbot) -> None:
+        downloader = MagicMock()
+        downloader.download.return_value = {"filepath": "/tmp/x.mp3", "title": "X"}
+        job = DownloadJob(
+            downloader,
+            row_id="r",
+            url="https://youtu.be/x",
+            fmt="mp3",
+            quality="192",
+            meta={"title": "X", "uploader": "U", "thumbnail": "t"},
+            sponsorblock=True,
+        )
+        with qtbot.waitSignal(job.finished, timeout=2000):
+            job.run()
+        downloader.download.assert_called_once()
+        _, kwargs = downloader.download.call_args
+        assert kwargs["sponsorblock"] is True
+        assert kwargs["trim"] is None
+
+    def test_extracts_trim_from_meta(self, qtbot) -> None:
+        downloader = MagicMock()
+        downloader.download.return_value = {"filepath": "/tmp/x.mp3", "title": "X"}
+        job = DownloadJob(
+            downloader,
+            row_id="r",
+            url="https://youtu.be/x",
+            fmt="mp3",
+            quality="192",
+            meta={
+                "title": "X",
+                "uploader": "U",
+                "thumbnail": "t",
+                "trim_start": 30,
+                "trim_end": 90,
+            },
+        )
+        with qtbot.waitSignal(job.finished, timeout=2000):
+            job.run()
+        _, kwargs = downloader.download.call_args
+        assert kwargs["trim"] == (30, 90)
+
 
 class TestDownloadJobProgressHook:
     def _job(self) -> DownloadJob:

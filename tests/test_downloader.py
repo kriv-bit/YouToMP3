@@ -290,3 +290,79 @@ class TestFallbackAlbum:
     def test_returns_empty_when_nothing_available(self) -> None:
         d = MediaDownloader()
         assert d._fallback_album({}) == ""
+
+
+class TestSponsorBlockInjection:
+    def _capture_opts(self, tmp_output_dir: Path, *, fmt: str, sponsorblock: bool):
+        d = MediaDownloader(str(tmp_output_dir))
+        cm, _ = _fake_ydl(str(tmp_output_dir / "x.webm"))
+        with (
+            patch("app.downloader.YoutubeDL", return_value=cm) as ydl_cls,
+            patch.object(d, "_normalize_audio_tags"),
+            patch.object(d, "_embed_cover_art", return_value=(True, "")),
+        ):
+            d.download("https://youtu.be/x", format_type=fmt, sponsorblock=sponsorblock)
+        return ydl_cls.call_args.args[0]
+
+    def test_does_not_inject_when_disabled(self, tmp_output_dir: Path) -> None:
+        opts = self._capture_opts(tmp_output_dir, fmt="mp3", sponsorblock=False)
+        keys = [pp.get("key") for pp in opts.get("postprocessors", [])]
+        assert "SponsorBlock" not in keys
+        assert "ModifyChapters" not in keys
+
+    @pytest.mark.parametrize("fmt", ["mp3", "m4a", "wav", "mp4"])
+    def test_injects_sponsorblock_postprocessors(self, tmp_output_dir: Path, fmt: str) -> None:
+        opts = self._capture_opts(tmp_output_dir, fmt=fmt, sponsorblock=True)
+        keys = [pp.get("key") for pp in opts.get("postprocessors", [])]
+        assert keys[0] == "SponsorBlock"
+        assert "ModifyChapters" in keys
+
+    def test_uses_expected_categories(self, tmp_output_dir: Path) -> None:
+        opts = self._capture_opts(tmp_output_dir, fmt="mp3", sponsorblock=True)
+        sponsor_pp = opts["postprocessors"][0]
+        assert sponsor_pp["categories"] == [
+            "sponsor",
+            "selfpromo",
+            "intro",
+            "outro",
+            "music_offtopic",
+        ]
+
+
+class TestTrimInjection:
+    def _capture_opts(self, tmp_output_dir: Path, *, trim):
+        d = MediaDownloader(str(tmp_output_dir))
+        cm, _ = _fake_ydl(str(tmp_output_dir / "x.webm"))
+        with (
+            patch("app.downloader.YoutubeDL", return_value=cm) as ydl_cls,
+            patch.object(d, "_normalize_audio_tags"),
+            patch.object(d, "_embed_cover_art", return_value=(True, "")),
+        ):
+            d.download("https://youtu.be/x", format_type="mp3", trim=trim)
+        return ydl_cls.call_args.args[0]
+
+    def test_no_ranges_when_trim_absent(self, tmp_output_dir: Path) -> None:
+        opts = self._capture_opts(tmp_output_dir, trim=None)
+        assert "download_ranges" not in opts
+        assert "force_keyframes_at_cuts" not in opts
+
+    def test_no_ranges_when_both_bounds_none(self, tmp_output_dir: Path) -> None:
+        opts = self._capture_opts(tmp_output_dir, trim=(None, None))
+        assert "download_ranges" not in opts
+
+    def test_injects_ranges_when_trim_provided(self, tmp_output_dir: Path) -> None:
+        opts = self._capture_opts(tmp_output_dir, trim=(30, 90))
+        assert callable(opts["download_ranges"])
+        section = opts["download_ranges"](None, None)
+        assert section == [{"start_time": 30.0, "end_time": 90.0}]
+        assert opts["force_keyframes_at_cuts"] is True
+
+    def test_supports_open_ended_start(self, tmp_output_dir: Path) -> None:
+        opts = self._capture_opts(tmp_output_dir, trim=(None, 90))
+        section = opts["download_ranges"](None, None)
+        assert section == [{"start_time": 0.0, "end_time": 90.0}]
+
+    def test_supports_open_ended_end(self, tmp_output_dir: Path) -> None:
+        opts = self._capture_opts(tmp_output_dir, trim=(30, None))
+        section = opts["download_ranges"](None, None)
+        assert section == [{"start_time": 30.0, "end_time": None}]
